@@ -29,6 +29,7 @@ import platform.UIKit.UIGraphicsPopContext
 import platform.UIKit.UIGraphicsPushContext
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
+import platform.UIKit.UIImagePNGRepresentation
 import platform.posix.memcpy
 import kotlin.math.max
 import kotlin.math.min
@@ -112,10 +113,25 @@ actual fun RgbImage.toImageBitmap(): ImageBitmap {
     return bitmap.asComposeImageBitmap()
 }
 
+actual fun RgbImage.encodeJpeg(quality: Int): ByteArray =
+    requireNotNull(withUIImage { UIImageJPEGRepresentation(it, quality / 100.0) }) { "JPEG encoding failed" }.toByteArray()
+
+actual fun RgbImage.encodePng(): ByteArray =
+    requireNotNull(withUIImage { UIImagePNGRepresentation(it) }) { "PNG encoding failed" }.toByteArray()
+
+actual fun RgbImage.encodeWebp(quality: Int): ByteArray = throw UnsupportedOperationException("iOS can't encode WebP")
+
+actual val canEncodeWebp: Boolean = false
+
 @OptIn(ExperimentalForeignApi::class)
-actual fun RgbImage.encodeJpeg(quality: Int): ByteArray {
+actual fun imageDimensions(bytes: ByteArray): Pair<Int, Int> =
+    uiImage(bytes).size.useContents { width.roundToInt() to height.roundToInt() }
+
+/** Runs [block] with the pixels wrapped in a UIImage, which only lives for the call. */
+@OptIn(ExperimentalForeignApi::class)
+private fun <T> RgbImage.withUIImage(block: (UIImage) -> T): T {
     val rgba = toRgbaBytes()
-    val jpeg = rgba.usePinned { pinned ->
+    return rgba.usePinned { pinned ->
         val colorSpace = CGColorSpaceCreateDeviceRGB()
         val context = CGBitmapContextCreate(
             pinned.addressOf(0), width.toULong(), height.toULong(), 8u,
@@ -125,12 +141,11 @@ actual fun RgbImage.encodeJpeg(quality: Int): ByteArray {
         val cgImage = CGBitmapContextCreateImage(requireNotNull(context) { "Could not create bitmap context" })
         CGContextRelease(context)
         try {
-            UIImageJPEGRepresentation(UIImage.imageWithCGImage(requireNotNull(cgImage)), quality / 100.0)
+            block(UIImage.imageWithCGImage(requireNotNull(cgImage)))
         } finally {
             CGImageRelease(cgImage)
         }
     }
-    return requireNotNull(jpeg) { "JPEG encoding failed" }.toByteArray()
 }
 
 private fun RgbImage.toRgbaBytes(): ByteArray {

@@ -42,22 +42,31 @@ internal class DatasetFiles(private val root: Path, private val fileSystem: File
     }
 
     fun deleteImage(id: String, image: ImageRecord) {
-        fileSystem.delete(imageFile(id, image), mustExist = false)
+        deleteImageFile(id, image)
         fileSystem.delete(thumbnailFile(id, image.id), mustExist = false)
     }
+
+    /** Deletes just the image file, keeping the thumbnail; for an image now stored under another extension. */
+    fun deleteImageFile(id: String, image: ImageRecord) = fileSystem.delete(imageFile(id, image), mustExist = false)
 
     fun read(path: Path): ByteArray = fileSystem.source(path).buffered().use { it.readByteArray() }
 
     fun readOrNull(path: Path): ByteArray? = if (fileSystem.exists(path)) read(path) else null
 
-    /** Removes image and thumbnail files [record] doesn't reference, left behind by an interrupted write. */
+    /**
+     * Removes files [record] doesn't reference, left behind by an interrupted write: temporary files, images
+     * of deleted records, and an image's old file after a conversion changed its extension.
+     */
     fun deleteUnreferencedFiles(id: String, record: DatasetRecord) {
-        val referenced = record.classes.flatMap { it.images }.map { it.id }.toSet()
-        for (dir in listOf(Path(root, id, IMAGES_DIR), Path(root, id, THUMBS_DIR))) {
+        val images = record.classes.flatMap { it.images }
+        val expected = mapOf(
+            Path(root, id, IMAGES_DIR) to images.map { "${it.id}.${it.extension}" }.toSet(),
+            Path(root, id, THUMBS_DIR) to images.map { "${it.id}.jpg" }.toSet(),
+        )
+        for ((dir, names) in expected) {
             if (!fileSystem.exists(dir)) continue
             for (file in fileSystem.list(dir)) {
-                val imageId = file.name.substringBefore('.').toLongOrNull()
-                if (imageId == null || imageId !in referenced) fileSystem.delete(file, mustExist = false)
+                if (file.name !in names) fileSystem.delete(file, mustExist = false)
             }
         }
     }
@@ -72,13 +81,7 @@ internal class DatasetFiles(private val root: Path, private val fileSystem: File
 
     private fun recordFile(id: String) = Path(root, id, RECORD_FILE)
 
-    private fun writeAtomically(target: Path, bytes: ByteArray) {
-        val parent = requireNotNull(target.parent)
-        fileSystem.createDirectories(parent)
-        val temp = Path(parent, "${target.name}.tmp")
-        fileSystem.sink(temp).buffered().use { it.write(bytes) }
-        fileSystem.atomicMove(temp, target)
-    }
+    private fun writeAtomically(target: Path, bytes: ByteArray) = fileSystem.writeAtomically(target, bytes)
 
     companion object {
         const val RECORD_FILE = "dataset.json"

@@ -13,6 +13,7 @@ actual val platformModule: Module = module {
             datasetsRoot = Path(context.filesDir.absolutePath, "datasets"),
             // Shared through FileProvider; see res/xml/datadroid_export_paths.xml.
             exportDirectory = Path(context.cacheDir.absolutePath, "exports"),
+            settingsFile = Path(context.filesDir.absolutePath, "settings.json"),
         )
     }
 }

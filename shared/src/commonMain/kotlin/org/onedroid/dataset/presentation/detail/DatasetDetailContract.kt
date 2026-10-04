@@ -4,11 +4,14 @@ import org.onedroid.dataset.core.presentation.UiText
 import org.onedroid.dataset.domain.model.ClassBalance
 import org.onedroid.dataset.domain.model.DatasetClass
 import org.onedroid.dataset.domain.model.ExportedFile
+import org.onedroid.dataset.domain.model.ImageSettings
 import org.onedroid.dataset.domain.model.ImageSource
+import org.onedroid.dataset.domain.usecase.ClassNaming
 import org.onedroid.dataset.domain.usecase.computeClassBalance
 import org.onedroid.dataset.platform.camera.CameraFacing
 import org.onedroid.dataset.platform.picker.PickedFile
 import org.onedroid.dataset.platform.picker.PickedFolder
+import org.onedroid.dataset.presentation.components.ImportPreviewUi
 import org.onedroid.dataset.presentation.components.TransferUi
 
 data class DatasetDetailState(
@@ -22,11 +25,27 @@ data class DatasetDetailState(
     val cameraFacing: CameraFacing = CameraFacing.Back,
     val recording: Boolean = false,
     val transfer: TransferUi? = null,
+    /** How images added to this dataset are stored. */
+    val imageSettings: ImageSettings = ImageSettings(),
+    /** The app's settings for new datasets, offered as a reset. */
+    val defaultImageSettings: ImageSettings = ImageSettings(),
+    /** Images stored with earlier settings, waiting to be converted. */
+    val outdatedImageCount: Int = 0,
+    /** The dataset's image conversion, while one runs. */
+    val conversion: TransferUi? = null,
+    /** Picked folders waiting for the user to choose how they become classes. */
+    val importPreview: ImportPreviewUi? = null,
 ) {
-    /** Edits wait while an import or export runs, so they can't race it. */
-    val canEdit: Boolean get() = !loading && transfer == null
+    /** Edits wait while an import, export or conversion runs, so they can't race it. */
+    val canEdit: Boolean get() = !loading && transfer == null && conversion == null
 
     val imageCount: Int get() = classes.sumOf { it.imageIds.size }
+
+    /** Outdated images can be converted (with passthrough settings there's nothing to convert them to). */
+    val offersConversion: Boolean get() = conversion == null && outdatedImageCount > 0 && !imageSettings.isPassthrough
+
+    /** Whether a banner sits above the class list. */
+    val showsBanner: Boolean get() = transfer != null || conversion != null || offersConversion
 }
 
 /** [colorIndex] picks the class's accent color; [imageIds] are oldest first. */
@@ -60,6 +79,15 @@ sealed interface DatasetDetailAction {
     data class OnDeleteImages(val imageIds: Set<Long>) : DatasetDetailAction
     data class OnMoveImages(val imageIds: Set<Long>, val toClassId: Int) : DatasetDetailAction
     data object OnExport : DatasetDetailAction
+
+    /** Stores new images with [settings]; [convertExisting] also converts the images already stored. */
+    data class OnSaveImageSettings(val settings: ImageSettings, val convertExisting: Boolean) : DatasetDetailAction
+    data object OnConvertImages : DatasetDetailAction
+    data object OnCancelConversion : DatasetDetailAction
+    data class OnImportNamingChange(val naming: ClassNaming) : DatasetDetailAction
+    data class OnImportMergeSplitsChange(val merge: Boolean) : DatasetDetailAction
+    data object OnConfirmImport : DatasetDetailAction
+    data object OnDismissImport : DatasetDetailAction
 }
 
 sealed interface DatasetDetailEvent {

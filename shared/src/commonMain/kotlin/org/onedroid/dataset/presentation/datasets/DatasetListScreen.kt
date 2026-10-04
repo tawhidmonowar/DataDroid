@@ -23,6 +23,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -54,6 +55,7 @@ import org.onedroid.dataset.core.presentation.ObserveAsEvents
 import org.onedroid.dataset.presentation.components.AppIcons
 import org.onedroid.dataset.presentation.components.ConfirmDialog
 import org.onedroid.dataset.presentation.components.DatasetThumbnail
+import org.onedroid.dataset.presentation.components.ImportPreviewDialog
 import org.onedroid.dataset.presentation.components.NameDialog
 import org.onedroid.dataset.presentation.components.ProgressBanner
 import org.onedroid.dataset.presentation.components.label
@@ -79,6 +81,7 @@ import org.onedroid.dataset.resources.datasets_empty_body
 import org.onedroid.dataset.resources.datasets_empty_import
 import org.onedroid.dataset.resources.datasets_empty_title
 import org.onedroid.dataset.resources.images_count
+import org.onedroid.dataset.resources.settings_open
 
 private sealed interface DatasetDialog {
     data object Create : DatasetDialog
@@ -89,6 +92,7 @@ private sealed interface DatasetDialog {
 @Composable
 fun DatasetListRoot(
     onOpenDataset: (String) -> Unit,
+    onOpenSettings: () -> Unit,
     viewModel: DatasetListViewModel = koinViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -100,6 +104,7 @@ fun DatasetListRoot(
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
             is DatasetListEvent.NavigateToDataset -> onOpenDataset(event.id)
+            DatasetListEvent.NavigateToSettings -> onOpenSettings()
             is DatasetListEvent.ShareFile -> sharer.share(event.file.path, event.file.mimeType)
             is DatasetListEvent.ShowMessage -> scope.launch { snackbar.showSnackbar(event.message.asStringAsync()) }
         }
@@ -123,6 +128,9 @@ fun DatasetListScreen(
             TopAppBar(
                 title = { Text(stringResource(Res.string.app_name), fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary) },
                 actions = {
+                    IconButton(onClick = { onAction(DatasetListAction.OnOpenSettings) }) {
+                        Icon(AppIcons.Settings, contentDescription = stringResource(Res.string.settings_open))
+                    }
                     when {
                         state.transfer != null -> CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.dp)
                         // The empty screen has its own import link.
@@ -169,7 +177,7 @@ fun DatasetListScreen(
                     items(state.datasets, key = { it.id }) { item ->
                         DatasetCard(
                             item = item,
-                            enabled = state.transfer == null,
+                            enabled = state.transfer == null && item.conversion == null,
                             modifier = Modifier.animateItem(),
                             onOpen = { onAction(DatasetListAction.OnOpenDataset(item.id)) },
                             onRename = { dialog = DatasetDialog.Rename(item) },
@@ -180,6 +188,16 @@ fun DatasetListScreen(
                 }
             }
         }
+    }
+
+    state.importPreview?.let { preview ->
+        ImportPreviewDialog(
+            preview = preview,
+            onNamingChange = { onAction(DatasetListAction.OnImportNamingChange(it)) },
+            onMergeSplitsChange = { onAction(DatasetListAction.OnImportMergeSplitsChange(it)) },
+            onConfirm = { onAction(DatasetListAction.OnConfirmImport) },
+            onDismiss = { onAction(DatasetListAction.OnDismissImport) },
+        )
     }
 
     when (val current = dialog) {
@@ -269,6 +287,9 @@ private fun DatasetCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                item.conversion?.let { fraction ->
+                    LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                }
             }
             Box {
                 IconButton(onClick = { menuOpen = true }) {

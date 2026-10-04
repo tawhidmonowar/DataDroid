@@ -51,3 +51,7 @@ Storage: `<app files>/datasets/<id>/dataset.json`, `images/<imageId>.<ext>`, `th
 
 - JVM: `./gradlew :shared:testAndroidHostTest`
 - iOS simulator: `./gradlew :shared:iosSimulatorArm64Test`
+
+## Author
+**Tawhid Monowar** - *Computer Science & Engineering Student* <br>
+[LinkedIn](https://www.linkedin.com/in/tawhidmonowar) | [Portfolio](https://tawhidmonowar.github.io/profile)  | [Email](mailto:tawhidmonowar@duck.com)

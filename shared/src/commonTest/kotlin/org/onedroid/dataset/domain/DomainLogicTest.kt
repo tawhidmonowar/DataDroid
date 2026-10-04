@@ -4,6 +4,7 @@ import org.onedroid.dataset.core.domain.Result
 import org.onedroid.dataset.domain.model.BalanceIssue
 import org.onedroid.dataset.domain.model.DatasetClass
 import org.onedroid.dataset.domain.model.LabeledImage
+import org.onedroid.dataset.domain.usecase.ClassNaming
 import org.onedroid.dataset.domain.usecase.ExportNaming
 import org.onedroid.dataset.domain.usecase.ImageFolders
 import org.onedroid.dataset.domain.usecase.NameError
@@ -69,7 +70,7 @@ class DomainLogicTest {
             LabeledImage(listOf("Animals", "dog"), "notes.txt", source(fakeJpeg("4"))),
             LabeledImage(listOf("__MACOSX", "Animals", "dog"), "._3.png", source(fakeJpeg("5"))),
         )
-        val groups = ImageFolders.groupByClass(images)
+        val groups = ImageFolders.analyze(images).groups(ClassNaming.TOP_FOLDER, mergeSplits = true)
         assertEquals(listOf("cat", "dog"), groups.keys.toList())
         assertEquals(listOf(2, 1), groups.values.map { it.size })
     }

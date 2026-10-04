@@ -23,6 +23,20 @@ expect fun RgbImage.toImageBitmap(): ImageBitmap
 
 expect fun RgbImage.encodeJpeg(quality: Int = 90): ByteArray
 
+expect fun RgbImage.encodePng(): ByteArray
+
+/** Lossy WebP; only call when [canEncodeWebp]. */
+expect fun RgbImage.encodeWebp(quality: Int): ByteArray
+
+/** Whether this platform can write WebP (iOS can read it but not write it). */
+expect val canEncodeWebp: Boolean
+
+/**
+ * The stored width and height of [bytes] without decoding the pixels (before any EXIF rotation, so only
+ * the shorter side is meaningful). Throws [IllegalArgumentException] if the bytes aren't a supported image.
+ */
+expect fun imageDimensions(bytes: ByteArray): Pair<Int, Int>
+
 /**
  * Center-crops a [width]x[height] frame to a square and box-filters it down to [targetSize].
  * [pixelAt] returns the source pixel as ARGB. [mirror] flips horizontally (front cameras).

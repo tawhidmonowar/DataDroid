@@ -7,24 +7,32 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.onedroid.dataset.core.domain.DataError
+import org.onedroid.dataset.core.domain.Result
 import org.onedroid.dataset.core.domain.onFailure
 import org.onedroid.dataset.core.domain.onSuccess
 import org.onedroid.dataset.core.presentation.UiText
 import org.onedroid.dataset.core.presentation.toUiText
 import org.onedroid.dataset.domain.repository.DatasetRepository
+import org.onedroid.dataset.domain.usecase.ImageConversions
+import org.onedroid.dataset.domain.usecase.ImageFolders
 import org.onedroid.dataset.platform.picker.PickedFile
+import org.onedroid.dataset.presentation.components.ImportPreviewUi
 import org.onedroid.dataset.presentation.components.TransferKind
 import org.onedroid.dataset.presentation.components.TransferUi
 import org.onedroid.dataset.resources.Res
 import org.onedroid.dataset.resources.message_dataset_imported
 
-class DatasetListViewModel(private val repository: DatasetRepository) : ViewModel() {
+class DatasetListViewModel(
+    private val repository: DatasetRepository,
+    private val conversions: ImageConversions,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(DatasetListState())
     val state = _state.asStateFlow()
@@ -35,8 +43,10 @@ class DatasetListViewModel(private val repository: DatasetRepository) : ViewMode
     private var transferJob: Job? = null
 
     init {
-        repository.observeDatasets()
-            .onEach { datasets -> _state.update { it.copy(loading = false, datasets = datasets.map { d -> d.toDatasetItemUi() }) } }
+        combine(repository.observeDatasets(), conversions.progress) { datasets, progress ->
+            datasets.map { d -> d.toDatasetItemUi().copy(conversion = progress[d.id]?.fraction) }
+        }
+            .onEach { datasets -> _state.update { it.copy(loading = false, datasets = datasets) } }
             .launchIn(viewModelScope)
     }
 
@@ -53,6 +63,11 @@ class DatasetListViewModel(private val repository: DatasetRepository) : ViewMode
             is DatasetListAction.OnExportDataset -> export(action.id)
             is DatasetListAction.OnImportArchive -> import(action.file)
             DatasetListAction.OnCancelTransfer -> transferJob?.cancel()
+            DatasetListAction.OnOpenSettings -> send(DatasetListEvent.NavigateToSettings)
+            is DatasetListAction.OnImportNamingChange -> _state.update { it.copy(importPreview = it.importPreview?.copy(naming = action.naming)) }
+            is DatasetListAction.OnImportMergeSplitsChange -> _state.update { it.copy(importPreview = it.importPreview?.copy(mergeSplits = action.merge)) }
+            DatasetListAction.OnConfirmImport -> confirmImport()
+            DatasetListAction.OnDismissImport -> _state.update { it.copy(importPreview = null) }
         }
     }
 
@@ -79,7 +94,28 @@ class DatasetListViewModel(private val repository: DatasetRepository) : ViewMode
             showError(if (e is IllegalArgumentException) DataError.Archive.TOO_LARGE else DataError.Archive.UNKNOWN)
             return@runTransfer
         }
-        repository.importArchive(bytes, onProgress = ::onProgress)
+        val contents = when (val read = repository.readArchive(bytes)) {
+            is Result.Error -> return@runTransfer showError(read.error)
+            is Result.Success -> read.data
+        }
+        val layout = ImageFolders.analyze(contents.images)
+        val preview = ImportPreviewUi.defaultFor(layout, contents.name)
+        when {
+            preview.groups.isEmpty() -> showError(DataError.Archive.NO_IMAGES)
+            // Ask how folders become classes; the import continues from OnConfirmImport.
+            layout.needsChoice -> _state.update { it.copy(importPreview = preview) }
+            else -> importDataset(preview)
+        }
+    }
+
+    private fun confirmImport() {
+        val preview = _state.value.importPreview ?: return
+        _state.update { it.copy(importPreview = null) }
+        runTransfer(TransferKind.IMPORT) { importDataset(preview) }
+    }
+
+    private suspend fun importDataset(preview: ImportPreviewUi) {
+        repository.importDataset(preview.datasetName, preview.groups, onProgress = ::onProgress)
             .onSuccess { id ->
                 _events.send(DatasetListEvent.ShowMessage(UiText.Resource(Res.string.message_dataset_imported)))
                 _events.send(DatasetListEvent.NavigateToDataset(id))

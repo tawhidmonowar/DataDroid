@@ -3,6 +3,7 @@ package org.onedroid.dataset.platform.image
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.os.Build
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.exifinterface.media.ExifInterface
@@ -65,18 +66,48 @@ internal fun Bitmap.toSquareRgbImage(targetSize: Int, rotationDegrees: Int, mirr
     return square.toRgbImage()
 }
 
+/** Transparent pixels are blended onto white, as on iOS, rather than turning black. */
 private fun Bitmap.toRgbImage(): RgbImage {
     val pixels = IntArray(width * height)
     getPixels(pixels, 0, width, 0, 0, width, height)
-    for (i in pixels.indices) pixels[i] = pixels[i] or (0xFF shl 24)
+    for (i in pixels.indices) {
+        val argb = pixels[i]
+        val alpha = argb ushr 24
+        pixels[i] = if (alpha == 0xFF) argb else {
+            fun blend(channel: Int) = (channel * alpha + 0xFF * (0xFF - alpha)) / 0xFF
+            (0xFF shl 24) or (blend((argb shr 16) and 0xFF) shl 16) or (blend((argb shr 8) and 0xFF) shl 8) or blend(argb and 0xFF)
+        }
+    }
     return RgbImage(width, height, pixels)
 }
 
 actual fun RgbImage.toImageBitmap(): ImageBitmap =
     Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888).asImageBitmap()
 
-actual fun RgbImage.encodeJpeg(quality: Int): ByteArray {
+actual fun RgbImage.encodeJpeg(quality: Int): ByteArray = compress(Bitmap.CompressFormat.JPEG, quality)
+
+actual fun RgbImage.encodePng(): ByteArray = compress(Bitmap.CompressFormat.PNG, 100)
+
+actual fun RgbImage.encodeWebp(quality: Int): ByteArray = compress(
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Bitmap.CompressFormat.WEBP_LOSSY else @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP,
+    quality,
+)
+
+actual val canEncodeWebp: Boolean = true
+
+actual fun imageDimensions(bytes: ByteArray): Pair<Int, Int> {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Unsupported image format" }
+    return bounds.outWidth to bounds.outHeight
+}
+
+private fun RgbImage.compress(format: Bitmap.CompressFormat, quality: Int): ByteArray {
     val bitmap = Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888)
-    return ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, quality, it) }.toByteArray()
+    try {
+        return ByteArrayOutputStream().also { check(bitmap.compress(format, quality, it)) { "$format encoding failed" } }.toByteArray()
+    } finally {
+        bitmap.recycle()
+    }
 }
 
