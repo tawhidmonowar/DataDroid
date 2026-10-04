@@ -14,6 +14,8 @@ import org.onedroid.dataset.data.storage.DatasetMetadata
 import org.onedroid.dataset.data.storage.FileDatasetRepository
 import org.onedroid.dataset.data.storage.StoragePaths
 import org.onedroid.dataset.domain.model.Dataset
+import org.onedroid.dataset.domain.usecase.ClassNaming
+import org.onedroid.dataset.domain.usecase.ImageFolders
 import org.onedroid.dataset.testutil.FakeImageProcessor
 import org.onedroid.dataset.testutil.fakeJpeg
 import org.onedroid.dataset.testutil.fakePng
@@ -161,7 +163,9 @@ class FileDatasetRepositoryTest {
         repository.addImages(id, second.id, listOf(source(fakePng("c")))).value()
         val zip = SystemFileSystem.source(Path(repository.exportDataset(id).value().path)).buffered().use { it.readByteArray() }
 
-        val importedId = repository.importArchive(zip).value()
+        val contents = repository.readArchive(zip).value()
+        val groups = ImageFolders.analyze(contents.images).groups(ClassNaming.TOP_FOLDER, mergeSplits = true)
+        val importedId = repository.importDataset(contents.name, groups).value()
         val imported = dataset(importedId)
         assertEquals("Animal Dataset 2", imported.name)
         assertEquals(listOf("Class_1" to 2, "Class_2" to 1), imported.classes.map { it.name to it.imageIds.size })
@@ -169,13 +173,26 @@ class FileDatasetRepositoryTest {
 
     @Test
     fun importRejectsNonZipAndZipWithoutClassFolders() = runTest {
-        assertEquals(DataError.Archive.NOT_A_ZIP, (repository.importArchive("nope".encodeToByteArray()) as Result.Error).error)
+        assertEquals(DataError.Archive.NOT_A_ZIP, (repository.readArchive("nope".encodeToByteArray()) as Result.Error).error)
 
         val buffer = kotlinx.io.Buffer()
-        org.onedroid.dataset.data.archive.ZipWriter(buffer).apply { add("loose.jpg", fakeJpeg("x")); finish() }
-        val result = repository.importArchive(buffer.readByteArray())
+        org.onedroid.dataset.data.archive.ZipWriter(buffer).apply { add("notes.txt", "x".encodeToByteArray()); finish() }
+        assertEquals(DataError.Archive.NO_IMAGES, (repository.readArchive(buffer.readByteArray()) as Result.Error).error)
+
+        val result = repository.importDataset("Empty", emptyMap())
         assertIs<Result.Error<*>>(result)
         assertEquals(DataError.Archive.NO_IMAGES, result.error)
         assertTrue(repository.observeDatasets().first().isEmpty())
+    }
+
+    @Test
+    fun zipNameComesFromItsWrapperFolderEvenWithAStrayImage() = runTest {
+        val buffer = kotlinx.io.Buffer()
+        org.onedroid.dataset.data.archive.ZipWriter(buffer).apply {
+            add("My_Pets/cat/1.jpg", fakeJpeg("1"))
+            add("My_Pets/cover.jpg", fakeJpeg("2"))
+            finish()
+        }
+        assertEquals("My Pets", repository.readArchive(buffer.readByteArray()).value().name)
     }
 }

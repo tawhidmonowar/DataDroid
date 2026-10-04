@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -20,16 +19,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -38,6 +36,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +65,7 @@ import org.onedroid.dataset.platform.picker.rememberFolderPicker
 import org.onedroid.dataset.platform.picker.rememberImagePicker
 import org.onedroid.dataset.presentation.components.AppIcons
 import org.onedroid.dataset.presentation.components.ConfirmDialog
+import org.onedroid.dataset.presentation.components.ImportPreviewDialog
 import org.onedroid.dataset.presentation.components.NameDialog
 import org.onedroid.dataset.presentation.components.ProgressBanner
 import org.onedroid.dataset.presentation.components.label
@@ -81,7 +81,9 @@ import org.onedroid.dataset.resources.class_clear_message
 import org.onedroid.dataset.resources.class_clear_title
 import org.onedroid.dataset.resources.class_delete_message
 import org.onedroid.dataset.resources.class_delete_title
-import org.onedroid.dataset.resources.dataset_export_menu
+import org.onedroid.dataset.resources.export_title
+import org.onedroid.dataset.resources.balance_title
+import org.onedroid.dataset.resources.dataset_image_settings
 import org.onedroid.dataset.resources.dataset_import_folder
 import org.onedroid.dataset.resources.dataset_import_zip
 import org.onedroid.dataset.resources.dataset_loading
@@ -129,7 +131,7 @@ fun DatasetDetailRoot(
                 // Let the new class reach the list before scrolling to it.
                 withFrameNanos { }
                 val index = currentState.classes.indexOfFirst { it.id == event.classId }
-                if (index >= 0) listState.animateScrollToItem(index + if (currentState.transfer != null) 1 else 0)
+                if (index >= 0) listState.animateScrollToItem(index + if (currentState.showsBanner) 1 else 0)
             }
         }
     }
@@ -172,55 +174,147 @@ fun DatasetDetailScreen(
     var clearingClass by remember { mutableStateOf<ClassUi?>(null) }
     var openImage by remember { mutableStateOf<Long?>(null) }
     var galleryClassId by remember { mutableStateOf<Int?>(null) }
+    var editingImageSettings by remember { mutableStateOf(false) }
+    var confirmingConversion by remember { mutableStateOf(false) }
+    var showingBalance by remember { mutableStateOf(false) }
+    var showingExport by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    // Shrinks to its icon while scrolling down the classes, and grows back when scrolling up.
+    val fabExpanded by remember { derivedStateOf { !listState.canScrollBackward || listState.lastScrolledBackward } }
+    // Hidden while the camera is open, where it would cover the record button.
+    val showFab = !state.loading && state.canEdit && state.cameraClassId == null
+    val scrollToClass = { classId: Int ->
+        val index = state.classes.indexOfFirst { it.id == classId }
+        if (index >= 0) scope.launch { listState.animateScrollToItem(index + if (state.showsBanner) 1 else 0) }
+    }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = { onAction(DatasetDetailAction.OnBack) }) {
-                        Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_back))
-                    }
-                },
-                title = { Text(state.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                actions = {
-                    IconButton(onClick = { renaming = true }, enabled = !state.loading) {
-                        Icon(AppIcons.Edit, contentDescription = stringResource(Res.string.dataset_rename))
-                    }
-                    DatasetMenu(
-                        enabled = state.canEdit,
-                        canExport = state.imageCount > 0,
-                        onImportFolder = onPickDatasetFolder,
-                        onImportZip = onPickDatasetZip,
-                        onExport = { onAction(DatasetDetailAction.OnExport) },
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-        containerColor = MaterialTheme.colorScheme.background,
-    ) { padding ->
-        Crossfade(state.loading, Modifier.padding(padding).fillMaxSize(), label = "dataset") { loading ->
-            if (loading) {
-                LoadingState(Modifier.fillMaxSize())
-            } else {
-                DatasetContent(
-                    state = state,
-                    listState = listState,
-                    onAction = onAction,
-                    onPickImages = onPickImages,
-                    onPickClassFolder = onPickClassFolder,
-                    onOpenImage = { openImage = it },
-                    onViewAll = { galleryClassId = it },
-                    onClearClass = { clearingClass = it },
-                    onDeleteClass = { imageClass ->
-                        // Deleting an empty class loses nothing, so it needs no confirmation.
-                        if (imageClass.imageIds.isEmpty()) onAction(DatasetDetailAction.OnDeleteClass(imageClass.id))
-                        else deletingClass = imageClass
+    BoxWithConstraints {
+        // Wide windows show balance and export in a side column; phones keep them in sheets.
+        val wide = maxWidth >= WIDE_LAYOUT_WIDTH
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { onAction(DatasetDetailAction.OnBack) }) {
+                            Icon(AppIcons.ArrowBack, contentDescription = stringResource(Res.string.action_back))
+                        }
                     },
+                    title = { Text(state.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    actions = {
+                        IconButton(onClick = { renaming = true }, enabled = !state.loading) {
+                            Icon(AppIcons.Edit, contentDescription = stringResource(Res.string.dataset_rename))
+                        }
+                        if (!wide) {
+                            IconButton(onClick = { showingExport = true }, enabled = !state.loading && state.imageCount > 0) {
+                                Icon(AppIcons.Download, contentDescription = stringResource(Res.string.export_title))
+                            }
+                        }
+                        DatasetMenu(
+                            enabled = state.canEdit,
+                            onImportFolder = onPickDatasetFolder,
+                            onImportZip = onPickDatasetZip,
+                            onImageSettings = { editingImageSettings = true },
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 )
+            },
+            floatingActionButton = {
+                if (!wide && showFab) AddClassButton(expanded = fabExpanded, onClick = { onAction(DatasetDetailAction.OnAddClass) })
+            },
+            snackbarHost = { SnackbarHost(snackbar) },
+            containerColor = MaterialTheme.colorScheme.background,
+        ) { padding ->
+            Crossfade(state.loading, Modifier.padding(padding).fillMaxSize(), label = "dataset") { loading ->
+                if (loading) {
+                    LoadingState(Modifier.fillMaxSize())
+                } else {
+                    DatasetContent(
+                        state = state,
+                        wide = wide,
+                        listState = listState,
+                        onAction = onAction,
+                        onPickImages = onPickImages,
+                        onPickClassFolder = onPickClassFolder,
+                        onOpenImage = { openImage = it },
+                        onViewAll = { galleryClassId = it },
+                        onClearClass = { clearingClass = it },
+                        onConvertImages = { confirmingConversion = true },
+                        onDeleteClass = { imageClass ->
+                            // Deleting an empty class loses nothing, so it needs no confirmation.
+                            if (imageClass.imageIds.isEmpty()) onAction(DatasetDetailAction.OnDeleteClass(imageClass.id))
+                            else deletingClass = imageClass
+                        },
+                        onShowBalance = { showingBalance = true },
+                        onClassClick = { scrollToClass(it) },
+                        addClassButton = {
+                            if (showFab) AddClassButton(expanded = fabExpanded, onClick = { onAction(DatasetDetailAction.OnAddClass) })
+                        },
+                    )
+                }
             }
         }
+    }
+
+    if (showingBalance) {
+        InsightSheet(AppIcons.BarChart, stringResource(Res.string.balance_title), onDismiss = { showingBalance = false }) {
+            ClassBalanceContent(
+                balance = state.balance,
+                onClassClick = { classId ->
+                    showingBalance = false
+                    scrollToClass(classId)
+                },
+            )
+        }
+    }
+
+    if (showingExport) {
+        InsightSheet(AppIcons.Download, stringResource(Res.string.export_title), onDismiss = { showingExport = false }) {
+            ExportContent(
+                datasetName = state.name,
+                classes = state.classes,
+                enabled = state.canEdit,
+                onExport = {
+                    showingExport = false
+                    onAction(DatasetDetailAction.OnExport)
+                },
+            )
+        }
+    }
+
+    state.importPreview?.let { preview ->
+        ImportPreviewDialog(
+            preview = preview,
+            onNamingChange = { onAction(DatasetDetailAction.OnImportNamingChange(it)) },
+            onMergeSplitsChange = { onAction(DatasetDetailAction.OnImportMergeSplitsChange(it)) },
+            onConfirm = { onAction(DatasetDetailAction.OnConfirmImport) },
+            onDismiss = { onAction(DatasetDetailAction.OnDismissImport) },
+        )
+    }
+
+    if (editingImageSettings) {
+        ImageSettingsSheet(
+            current = state.imageSettings,
+            defaults = state.defaultImageSettings,
+            imageCount = state.imageCount,
+            onSave = { settings, convert ->
+                editingImageSettings = false
+                onAction(DatasetDetailAction.OnSaveImageSettings(settings, convert))
+            },
+            onDismiss = { editingImageSettings = false },
+        )
+    }
+
+    if (confirmingConversion) {
+        ConvertConfirmDialog(
+            count = state.outdatedImageCount,
+            settings = state.imageSettings,
+            onConfirm = {
+                confirmingConversion = false
+                onAction(DatasetDetailAction.OnConvertImages)
+            },
+            onDismiss = { confirmingConversion = false },
+        )
     }
 
     if (renaming) {
@@ -319,6 +413,7 @@ fun DatasetDetailScreen(
 @Composable
 private fun DatasetContent(
     state: DatasetDetailState,
+    wide: Boolean,
     listState: LazyListState,
     onAction: (DatasetDetailAction) -> Unit,
     onPickImages: (Int) -> Unit,
@@ -327,14 +422,36 @@ private fun DatasetContent(
     onViewAll: (Int) -> Unit,
     onClearClass: (ClassUi) -> Unit,
     onDeleteClass: (ClassUi) -> Unit,
+    onConvertImages: () -> Unit,
+    onShowBalance: () -> Unit,
+    onClassClick: (Int) -> Unit,
+    addClassButton: @Composable () -> Unit,
 ) {
     val banner: LazyListScope.() -> Unit = {
-        state.transfer?.let { transfer ->
-            item(key = "transfer") {
+        val transfer = state.transfer
+        val conversion = state.conversion
+        when {
+            transfer != null -> item(key = "transfer") {
                 ProgressBanner(
                     text = transfer.label(),
                     fraction = transfer.fraction,
                     onCancel = { onAction(DatasetDetailAction.OnCancelTransfer) },
+                    modifier = Modifier.animateItem(),
+                )
+            }
+            conversion != null -> item(key = "conversion") {
+                ProgressBanner(
+                    text = conversion.label(),
+                    fraction = conversion.fraction,
+                    onCancel = { onAction(DatasetDetailAction.OnCancelConversion) },
+                    modifier = Modifier.animateItem(),
+                )
+            }
+            state.offersConversion -> item(key = "outdated") {
+                OutdatedImagesCard(
+                    count = state.outdatedImageCount,
+                    enabled = state.canEdit,
+                    onConvert = onConvertImages,
                     modifier = Modifier.animateItem(),
                 )
             }
@@ -343,40 +460,51 @@ private fun DatasetContent(
     val classes: LazyListScope.() -> Unit = {
         classItems(state, onAction, onPickImages, onPickClassFolder, onOpenImage, onViewAll, onClearClass, onDeleteClass)
     }
-    val balancePanel = @Composable { ClassBalanceCard(state.balance) }
-    val exportPanel = @Composable {
-        ExportCard(
-            datasetName = state.name,
-            classes = state.classes,
-            enabled = state.canEdit,
-            onExport = { onAction(DatasetDetailAction.OnExport) },
-        )
-    }
+    val spacing = Arrangement.spacedBy(16.dp)
+    // Room at the end so the last class can scroll clear of the add-class button.
+    val listPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp)
 
-    BoxWithConstraints(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.TopCenter) {
-        val spacing = Arrangement.spacedBy(16.dp)
-        val contentPadding = PaddingValues(16.dp)
-        if (maxWidth >= 840.dp) {
-            // Classes on the left; balance and export beside them.
-            Row(Modifier.fillMaxSize()) {
-                LazyColumn(Modifier.weight(1.3f).fillMaxHeight(), state = listState, contentPadding = contentPadding, verticalArrangement = spacing) {
+    if (wide) {
+        // Classes on the left; balance and export always visible beside them.
+        Row(Modifier.fillMaxSize().imePadding()) {
+            Box(Modifier.weight(1.3f).fillMaxHeight()) {
+                LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = listPadding, verticalArrangement = spacing) {
                     banner()
                     classes()
                 }
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(contentPadding), verticalArrangement = spacing) {
-                    balancePanel()
-                    exportPanel()
-                }
+                Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) { addClassButton() }
             }
-        } else {
-            LazyColumn(Modifier.widthIn(max = 672.dp).fillMaxSize(), state = listState, contentPadding = contentPadding, verticalArrangement = spacing) {
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = spacing) {
+                ClassBalanceCard(state.balance, onClassClick = onClassClick)
+                ExportCard(
+                    datasetName = state.name,
+                    classes = state.classes,
+                    enabled = state.canEdit,
+                    onExport = { onAction(DatasetDetailAction.OnExport) },
+                )
+            }
+        }
+    } else {
+        // Balance and export live in sheets, so the summary stays in reach however many classes there are.
+        Column(Modifier.fillMaxSize().imePadding(), horizontalAlignment = Alignment.CenterHorizontally) {
+            BalanceSummaryStrip(state.balance, onClick = onShowBalance)
+            LazyColumn(Modifier.widthIn(max = 672.dp).fillMaxWidth().weight(1f), state = listState, contentPadding = listPadding, verticalArrangement = spacing) {
                 banner()
                 classes()
-                item(key = "balance") { Box(Modifier.animateItem()) { balancePanel() } }
-                item(key = "export") { Box(Modifier.animateItem()) { exportPanel() } }
             }
         }
     }
+}
+
+/** Adds a class; shown floating over the class list so it's in reach however long the list is. */
+@Composable
+private fun AddClassButton(expanded: Boolean, onClick: () -> Unit) {
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        expanded = expanded,
+        icon = { Icon(AppIcons.Add, contentDescription = null) },
+        text = { Text(stringResource(Res.string.class_add)) },
+    )
 }
 
 private fun LazyListScope.classItems(
@@ -425,26 +553,14 @@ private fun LazyListScope.classItems(
             },
         )
     }
-    item(key = "add-class") {
-        OutlinedButton(
-            onClick = { onAction(DatasetDetailAction.OnAddClass) },
-            enabled = editable,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.animateItem().fillMaxWidth().height(72.dp),
-        ) {
-            Icon(AppIcons.Add, contentDescription = null)
-            Text(stringResource(Res.string.class_add), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 8.dp))
-        }
-    }
 }
 
 @Composable
 private fun DatasetMenu(
     enabled: Boolean,
-    canExport: Boolean,
     onImportFolder: () -> Unit,
     onImportZip: () -> Unit,
-    onExport: () -> Unit,
+    onImageSettings: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Box {
@@ -465,14 +581,16 @@ private fun DatasetMenu(
                 onClick = { menuOpen = false; onImportZip() },
             )
             DropdownMenuItem(
-                text = { Text(stringResource(Res.string.dataset_export_menu)) },
-                leadingIcon = { Icon(AppIcons.Download, contentDescription = null) },
-                enabled = enabled && canExport,
-                onClick = { menuOpen = false; onExport() },
+                text = { Text(stringResource(Res.string.dataset_image_settings)) },
+                leadingIcon = { Icon(AppIcons.Image, contentDescription = null) },
+                enabled = enabled,
+                onClick = { menuOpen = false; onImageSettings() },
             )
         }
     }
 }
+
+private val WIDE_LAYOUT_WIDTH = 840.dp
 
 @Composable
 private fun LoadingState(modifier: Modifier) {

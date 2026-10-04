@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.onedroid.dataset.data.storage.DatasetMetadata
+import org.onedroid.dataset.domain.model.ArchiveContents
 import org.onedroid.dataset.domain.model.ImageSource
 import org.onedroid.dataset.domain.model.LabeledImage
 import org.onedroid.dataset.domain.usecase.ExportNaming
@@ -12,19 +13,14 @@ import org.onedroid.dataset.domain.usecase.ImageFolders
 /** Reads a zip of class folders, such as one [DatasetExporter] wrote or a desktop tool zipped. */
 internal object ArchiveImporter {
 
-    class Contents(
-        /** The dataset's name from its `metadata.json`, else the folder wrapping everything, if any. */
-        val name: String?,
-        val groups: Map<String, List<ImageSource>>,
-    )
-
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
-     * Lists [archive]'s images grouped by class folder; each image is decoded from the zip only when read.
-     * Throws [IllegalArgumentException] if it isn't a readable zip, or [ZipTooLargeException].
+     * Lists [archive]'s usable images with their folders; each is decoded from the zip only when read. The
+     * name comes from `metadata.json`, else the folder wrapping everything. Throws [IllegalArgumentException]
+     * if it isn't a readable zip, or [ZipTooLargeException].
      */
-    fun read(archive: ByteArray): Contents {
+    fun read(archive: ByteArray): ArchiveContents {
         val entries = ZipReader.entries(archive, maxTotalSize = MAX_TOTAL_SIZE)
             .map { it.name.replace('\\', '/').trim('/') to it }
             .filter { (path, _) -> path.isNotEmpty() }
@@ -40,12 +36,13 @@ internal object ArchiveImporter {
                 runCatching { json.decodeFromString(DatasetMetadata.serializer(), entry.read().decodeToString()).name }.getOrNull()
             }
         val usable = images.filter { ImageFolders.isImageFile(it.name) && it.folders.none(ImageFolders::isIgnoredFolder) }
-        val wrapperName = usable.map { it.folders.firstOrNull() }.distinct().singleOrNull()
-            ?.takeIf { usable.all { it.folders.size >= 2 } }
+        // As in ImageFolders.analyze: a stray image beside the class folders doesn't stop a folder being a wrapper.
+        val wrapperName = usable.mapNotNull { it.folders.firstOrNull() }.distinct().singleOrNull()
+            ?.takeIf { usable.any { it.folders.size >= 2 } }
 
-        return Contents(
+        return ArchiveContents(
             name = metadataName?.takeIf { it.isNotBlank() } ?: wrapperName?.replace('_', ' '),
-            groups = ImageFolders.groupByClass(images),
+            images = usable,
         )
     }
 

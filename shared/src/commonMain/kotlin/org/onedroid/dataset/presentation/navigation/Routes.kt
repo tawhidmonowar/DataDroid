@@ -7,3 +7,6 @@ data object DatasetListRoute
 
 @Serializable
 data class DatasetDetailRoute(val datasetId: String)
+
+@Serializable
+data object SettingsRoute

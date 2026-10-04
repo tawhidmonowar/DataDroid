@@ -24,6 +24,7 @@ actual val platformModule: Module = module {
         StoragePaths(
             datasetsRoot = Path(base, "datasets"),
             exportDirectory = Path(NSTemporaryDirectory(), "exports"),
+            settingsFile = Path(base, "settings.json"),
         )
     }
 }

@@ -32,11 +32,14 @@ import org.onedroid.dataset.data.archive.DatasetExporter
 import org.onedroid.dataset.data.archive.ZipTooLargeException
 import org.onedroid.dataset.data.image.ImageFormat
 import org.onedroid.dataset.data.image.ImageProcessor
+import org.onedroid.dataset.domain.model.ArchiveContents
 import org.onedroid.dataset.domain.model.Dataset
 import org.onedroid.dataset.domain.model.DatasetSummary
 import org.onedroid.dataset.domain.model.ExportedFile
+import org.onedroid.dataset.domain.model.ImageSettings
 import org.onedroid.dataset.domain.model.ImageSource
 import org.onedroid.dataset.domain.model.ImportResult
+import org.onedroid.dataset.domain.model.ResizeMode
 import org.onedroid.dataset.domain.repository.DatasetRepository
 import org.onedroid.dataset.domain.repository.ProgressListener
 import org.onedroid.dataset.domain.usecase.ExportNaming
@@ -55,6 +58,8 @@ class FileDatasetRepository(
     private val fileSystem: FileSystem = SystemFileSystem,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+    /** The image settings new datasets start with. */
+    private val defaultImageSettings: suspend () -> ImageSettings = { ImageSettings() },
 ) : DatasetRepository {
     private val files = DatasetFiles(paths.datasetsRoot, fileSystem)
     private val exporter = DatasetExporter(fileSystem)
@@ -79,7 +84,8 @@ class FileDatasetRepository(
     }
 
     override suspend fun createDataset(name: String): Result<String, DataError.Local> = catching {
-        locked { createLocked(name, listOf(STARTER_CLASS)) }
+        val settings = defaultImageSettings()
+        locked { createLocked(name, listOf(STARTER_CLASS), settings) }
     }
 
     override suspend fun renameDataset(id: String, name: String): EmptyResult<DataError.Local> = catching {
@@ -194,17 +200,34 @@ class FileDatasetRepository(
         }
     }
 
-    override suspend fun importArchive(archive: ByteArray, onProgress: ProgressListener): Result<String, DataError> {
-        val contents = when (val read = readArchive(archive)) {
-            is Result.Error -> return read
-            is Result.Success -> read.data
+    override suspend fun readArchive(archive: ByteArray): Result<ArchiveContents, DataError.Archive> {
+        val contents = try {
+            withContext(Dispatchers.Default) { ArchiveImporter.read(archive) }
+        } catch (e: ZipTooLargeException) {
+            return Result.Error(DataError.Archive.TOO_LARGE)
+        } catch (e: IllegalArgumentException) {
+            return Result.Error(DataError.Archive.NOT_A_ZIP)
         }
-        val id = when (val created = catching { locked { createLocked(contents.name ?: IMPORTED_NAME, classNames = emptyList()) } }) {
+        if (contents.images.isEmpty()) return Result.Error(DataError.Archive.NO_IMAGES)
+        return Result.Success(contents)
+    }
+
+    override suspend fun importDataset(
+        name: String?,
+        groups: Map<String, List<ImageSource>>,
+        onProgress: ProgressListener,
+    ): Result<String, DataError> {
+        if (groups.isEmpty()) return Result.Error(DataError.Archive.NO_IMAGES)
+        val created = catching {
+            val settings = defaultImageSettings()
+            locked { createLocked(name?.takeIf { it.isNotBlank() } ?: IMPORTED_NAME, classNames = emptyList(), settings) }
+        }
+        val id = when (created) {
             is Result.Error -> return created
             is Result.Success -> created.data
         }
         val imported = try {
-            importLabeledImages(id, contents.groups, onProgress)
+            importLabeledImages(id, groups, onProgress)
         } catch (e: CancellationException) {
             withContext(NonCancellable) { deleteDataset(id) }
             throw e
@@ -222,29 +245,86 @@ class FileDatasetRepository(
         }
     }
 
-    override suspend fun importArchiveInto(
-        datasetId: String,
-        archive: ByteArray,
-        onProgress: ProgressListener,
-    ): Result<ImportResult, DataError> {
-        val contents = when (val read = readArchive(archive)) {
-            is Result.Error -> return read
-            is Result.Success -> read.data
+    override suspend fun updateImageSettings(datasetId: String, settings: ImageSettings): EmptyResult<DataError.Local> = catching {
+        locked {
+            val record = current(datasetId)
+            val sanitized = settings.sanitized()
+            if (sanitized == record.imageSettings) return@locked
+            val revision = record.settingsRevision + 1
+            // Untouched originals can't be brought back, so with passthrough settings every image is current.
+            val classes = if (!sanitized.isPassthrough) record.classes else record.classes.map { c ->
+                c.copy(images = c.images.map { it.copy(revision = revision) })
+            }
+            commit(datasetId, record.copy(imageSettings = sanitized, settingsRevision = revision, classes = classes))
         }
-        return importLabeledImages(datasetId, contents.groups, onProgress)
     }
 
-    /** The archive's class folders; fails if it isn't a zip or holds no class folders with images. */
-    private suspend fun readArchive(archive: ByteArray): Result<ArchiveImporter.Contents, DataError.Archive> {
-        val contents = try {
-            withContext(Dispatchers.Default) { ArchiveImporter.read(archive) }
-        } catch (e: ZipTooLargeException) {
-            return Result.Error(DataError.Archive.TOO_LARGE)
-        } catch (e: IllegalArgumentException) {
-            return Result.Error(DataError.Archive.NOT_A_ZIP)
+    /**
+     * Converts outdated images a few at a time off the lock, then swaps each into the record on its own.
+     * A new file under a different extension sits beside the old one until the record pointing to it is
+     * saved; only then is the old file deleted, so an interruption never leaves the record pointing at a
+     * missing file. Leftovers are removed by [DatasetFiles.deleteUnreferencedFiles] on the next load.
+     */
+    override suspend fun convertImages(datasetId: String, onProgress: ProgressListener): Result<ImportResult, DataError.Local> = catching {
+        val (snapshot, pending) = locked { current(datasetId).let { it to it.outdatedImages } }
+        val settings = snapshot.imageSettings
+        val revision = snapshot.settingsRevision
+        var converted = 0
+        var skipped = 0
+        var unsaved = 0
+        val replaced = mutableListOf<ImageRecord>()
+
+        // Deletes old files once the record no longer refers to them. Call while locked.
+        fun save() {
+            records.value?.get(datasetId)?.let { files.writeRecord(datasetId, it) }
+            replaced.forEach { files.deleteImageFile(datasetId, it) }
+            replaced.clear()
+            unsaved = 0
         }
-        if (contents.groups.isEmpty()) return Result.Error(DataError.Archive.NO_IMAGES)
-        return Result.Success(contents)
+
+        onProgress(0, pending.size)
+        try {
+            for (chunk in pending.chunked(parallelism(settings))) {
+                val results = coroutineScope {
+                    chunk.map { image ->
+                        async {
+                            val bytes = withContext(ioDispatcher) { files.readOrNull(files.imageFile(datasetId, image)) }
+                            bytes?.let { process(it, settings) }
+                        }
+                    }.awaitAll()
+                }
+                val stillCurrent = locked {
+                    val record = records.value?.get(datasetId) ?: return@locked false
+                    // The settings changed again; the rest are converted by the next run.
+                    if (record.settingsRevision != revision) return@locked false
+                    var updated = record
+                    chunk.zip(results) { image, result ->
+                        // Deleted meanwhile; nothing has been written for it yet.
+                        val existing = updated.findImageOrNull(image.id) ?: return@zip
+                        val next = if (result == null) {
+                            skipped++
+                            existing.copy(revision = revision)
+                        } else {
+                            val next = ImageRecord(existing.id, result.extension, revision)
+                            files.writeImage(datasetId, next, result.bytes, result.thumbnail)
+                            if (next.extension != existing.extension) replaced += existing
+                            converted++
+                            next
+                        }
+                        updated = updated.replaceImage(next)
+                        unsaved++
+                    }
+                    commit(datasetId, updated, persist = false)
+                    if (unsaved >= SAVE_EVERY) save()
+                    true
+                }
+                onProgress(converted + skipped, pending.size)
+                if (!stillCurrent) break
+            }
+        } finally {
+            withContext(NonCancellable) { locked { if (unsaved > 0 || replaced.isNotEmpty()) save() } }
+        }
+        ImportResult(converted, skipped)
     }
 
     /**
@@ -259,15 +339,17 @@ class FileDatasetRepository(
         var added = 0
         var skipped = 0
         var unsaved = false
+        // Images keep the settings they were prepared with, so a change mid-import marks the rest outdated.
+        val (settings, revision) = locked { current(datasetId).let { it.imageSettings to it.settingsRevision } }
         onProgress(0, items.size)
         try {
-            items.chunked(DECODE_PARALLELISM).forEach { chunk ->
-                val prepared = coroutineScope { chunk.map { (_, source) -> async { prepare(source) } }.awaitAll() }
+            items.chunked(parallelism(settings)).forEach { chunk ->
+                val prepared = coroutineScope { chunk.map { (_, source) -> async { prepare(source, settings) } }.awaitAll() }
                 chunk.zip(prepared) { (classId, _), image ->
                     val committed = image != null && locked {
                         val record = current(datasetId)
                         val target = record.classes.firstOrNull { it.id == classId } ?: return@locked false
-                        val imageRecord = ImageRecord(record.nextImageId, image.extension)
+                        val imageRecord = ImageRecord(record.nextImageId, image.extension, revision)
                         files.writeImage(datasetId, imageRecord, image.bytes, image.thumbnail)
                         val updated = record.copy(
                             nextImageId = record.nextImageId + 1,
@@ -293,8 +375,8 @@ class FileDatasetRepository(
 
     private class PreparedImage(val bytes: ByteArray, val extension: String, val thumbnail: ByteArray)
 
-    /** Reads and validates an image, or returns null if it can't be read or decoded. */
-    private suspend fun prepare(source: ImageSource): PreparedImage? {
+    /** Reads, validates and converts an image, or returns null if it can't be read or decoded. */
+    private suspend fun prepare(source: ImageSource, settings: ImageSettings): PreparedImage? {
         val bytes = try {
             source.read()
         } catch (e: CancellationException) {
@@ -302,19 +384,33 @@ class FileDatasetRepository(
         } catch (e: Exception) {
             return null
         }
+        return process(bytes, settings)
+    }
+
+    /** [bytes] stored as [settings] say, with a thumbnail; null if they aren't a decodable image. */
+    private suspend fun process(bytes: ByteArray, settings: ImageSettings): PreparedImage? {
         if (bytes.size > ArchiveImporter.MAX_IMAGE_SIZE) return null
         val extension = ImageFormat.extensionOf(bytes) ?: return null
-        val thumbnail = withContext(Dispatchers.Default) {
+        return withContext(Dispatchers.Default) {
             try {
-                imageProcessor.thumbnail(bytes, THUMBNAIL_SIZE)
+                val thumbnail = imageProcessor.thumbnail(bytes, THUMBNAIL_SIZE)
+                if (settings.isPassthrough) {
+                    PreparedImage(bytes, extension, thumbnail)
+                } else {
+                    val converted = imageProcessor.convert(bytes, settings)
+                    PreparedImage(converted.bytes, converted.extension, thumbnail)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 null
             }
-        } ?: return null
-        return PreparedImage(bytes, extension, thumbnail)
+        }
     }
+
+    /** Full-size decodes take far more memory, so they run one at a time. */
+    private fun parallelism(settings: ImageSettings) =
+        if (!settings.isPassthrough && settings.resize == ResizeMode.ORIGINAL) 1 else DECODE_PARALLELISM
 
     /** Ids of the classes named [names] (ignoring case), creating the missing ones. Call while locked. */
     private fun ensureClasses(datasetId: String, names: Collection<String>): Map<String, Int> {
@@ -330,7 +426,7 @@ class FileDatasetRepository(
         return ids
     }
 
-    private fun createLocked(name: String, classNames: List<String>): String {
+    private fun createLocked(name: String, classNames: List<String>, settings: ImageSettings): String {
         val taken = records.value.orEmpty().values.map { it.name }
         val id = newId()
         val now = clock()
@@ -341,6 +437,7 @@ class FileDatasetRepository(
             nextClassId = classNames.size + 1,
             nextImageId = 1,
             classes = classNames.mapIndexed { index, className -> ClassRecord(index + 1, className) },
+            imageSettings = settings.sanitized(),
         )
         files.writeRecord(id, record)
         records.update { it.orEmpty() + (id to record) }
@@ -349,8 +446,13 @@ class FileDatasetRepository(
 
     private fun current(id: String): DatasetRecord = records.value?.get(id) ?: throw NotFoundException()
 
-    private fun DatasetRecord.findImage(imageId: Long): ImageRecord =
-        classes.firstNotNullOfOrNull { c -> c.images.firstOrNull { it.id == imageId } } ?: throw NotFoundException()
+    private fun DatasetRecord.findImage(imageId: Long): ImageRecord = findImageOrNull(imageId) ?: throw NotFoundException()
+
+    private fun DatasetRecord.findImageOrNull(imageId: Long): ImageRecord? =
+        classes.firstNotNullOfOrNull { c -> c.images.firstOrNull { it.id == imageId } }
+
+    private fun DatasetRecord.replaceImage(image: ImageRecord): DatasetRecord =
+        copy(classes = classes.map { c -> c.copy(images = c.images.map { if (it.id == image.id) image else it }) })
 
     /** Saves [record] (unless [persist] is false) and publishes it. Call while locked. */
     private fun commit(id: String, record: DatasetRecord, persist: Boolean = true) {

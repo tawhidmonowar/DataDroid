@@ -4,9 +4,11 @@ import kotlinx.coroutines.flow.Flow
 import org.onedroid.dataset.core.domain.DataError
 import org.onedroid.dataset.core.domain.EmptyResult
 import org.onedroid.dataset.core.domain.Result
+import org.onedroid.dataset.domain.model.ArchiveContents
 import org.onedroid.dataset.domain.model.Dataset
 import org.onedroid.dataset.domain.model.DatasetSummary
 import org.onedroid.dataset.domain.model.ExportedFile
+import org.onedroid.dataset.domain.model.ImageSettings
 import org.onedroid.dataset.domain.model.ImageSource
 import org.onedroid.dataset.domain.model.ImportResult
 
@@ -67,16 +69,34 @@ interface DatasetRepository {
      */
     suspend fun exportDataset(datasetId: String, onProgress: ProgressListener = { _, _ -> }): Result<ExportedFile, DataError>
 
-    /** Creates a dataset from a zip of class folders (such as an export) and returns its id. */
-    suspend fun importArchive(
-        archive: ByteArray,
+    /**
+     * Lists the images in a zip without decoding them, so the caller can decide how its folders become
+     * classes. Fails if it isn't a readable zip or holds no images.
+     */
+    suspend fun readArchive(archive: ByteArray): Result<ArchiveContents, DataError.Archive>
+
+    /**
+     * Creates a dataset named [name] (or a default name) holding [groups], one class per entry, and returns
+     * its id. Nothing is left behind if it fails, is cancelled, or no image could be added.
+     */
+    suspend fun importDataset(
+        name: String?,
+        groups: Map<String, List<ImageSource>>,
         onProgress: ProgressListener = { _, _ -> },
     ): Result<String, DataError>
 
-    /** Adds the class folders in a zip to an existing dataset, merging classes with the same name. */
-    suspend fun importArchiveInto(
+    /**
+     * Stores images added from now on with [settings]. Images already in the dataset keep their files and
+     * count as outdated until [convertImages] rewrites them.
+     */
+    suspend fun updateImageSettings(datasetId: String, settings: ImageSettings): EmptyResult<DataError.Local>
+
+    /**
+     * Rewrites the dataset's outdated images with its current settings, replacing the stored files. Images
+     * that can't be decoded are left as they are and counted as skipped. Safe to cancel and run again.
+     */
+    suspend fun convertImages(
         datasetId: String,
-        archive: ByteArray,
         onProgress: ProgressListener = { _, _ -> },
-    ): Result<ImportResult, DataError>
+    ): Result<ImportResult, DataError.Local>
 }

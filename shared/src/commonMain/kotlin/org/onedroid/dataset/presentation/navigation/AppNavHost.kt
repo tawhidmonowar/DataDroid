@@ -12,6 +12,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import org.onedroid.dataset.presentation.datasets.DatasetListRoot
 import org.onedroid.dataset.presentation.detail.DatasetDetailRoot
+import org.onedroid.dataset.presentation.settings.SettingsRoot
 
 @Composable
 fun AppNavHost() {
@@ -30,6 +31,12 @@ fun AppNavHost() {
                 onOpenDataset = { id ->
                     navController.navigate(DatasetDetailRoute(id)) { launchSingleTop = true }
                 },
+                onOpenSettings = { navController.navigate(SettingsRoute) { launchSingleTop = true } },
+            )
+        }
+        composable<SettingsRoute> { entry ->
+            SettingsRoot(
+                onBack = { if (navController.currentBackStackEntry == entry) navController.navigateUp() },
             )
         }
         composable<DatasetDetailRoute> { entry ->

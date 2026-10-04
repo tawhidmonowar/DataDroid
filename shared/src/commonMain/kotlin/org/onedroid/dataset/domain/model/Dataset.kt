@@ -10,12 +10,17 @@ data class DatasetSummary(
     val coverImageId: Long?,
 )
 
-/** A labelled image dataset: each class (label) holds the ids of its images, oldest first. */
+/**
+ * A labelled image dataset: each class (label) holds the ids of its images, oldest first. New images are
+ * stored with [imageSettings]; [outdatedImageCount] images were stored with earlier settings.
+ */
 data class Dataset(
     val id: String,
     val name: String,
     val updatedAt: Long,
     val classes: List<DatasetClass>,
+    val imageSettings: ImageSettings = ImageSettings(),
+    val outdatedImageCount: Int = 0,
 ) {
     val imageCount: Int get() = classes.sumOf { it.imageIds.size }
 }
@@ -33,6 +38,9 @@ fun interface ImageSource {
 
 /** An image found in a picked folder or zip; [folders] is its directory path below the picked root. */
 class LabeledImage(val folders: List<String>, val name: String, val source: ImageSource)
+
+/** A zip's images, unread, and the dataset name it suggests (from its `metadata.json` or wrapper folder). */
+class ArchiveContents(val name: String?, val images: List<LabeledImage>)
 
 /** Outcome of adding a batch of images: images that couldn't be decoded are [skipped]. */
 data class ImportResult(val added: Int, val skipped: Int)

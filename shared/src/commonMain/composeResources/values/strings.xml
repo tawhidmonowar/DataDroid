@@ -46,7 +46,6 @@
     <string name="dataset_loading">Loading dataset…</string>
     <string name="dataset_import_folder">Import class folders</string>
     <string name="dataset_import_zip">Import class folders from zip</string>
-    <string name="dataset_export_menu">Export dataset</string>
     <string name="class_add">Add a class</string>
     <string name="class_default_name">Class %1$d</string>
     <string name="class_add_images">Add Image Samples:</string>
@@ -106,6 +105,13 @@
     <string name="stat_average">Per class</string>
     <string name="balance_empty">Add images to see how they’re spread across classes.</string>
     <string name="balance_balanced">Classes look balanced.</string>
+    <string name="balance_details">Show class balance</string>
+    <string name="balance_status_balanced">Balanced</string>
+    <string name="balance_status_empty">No images yet</string>
+    <plurals name="balance_status_tips">
+        <item quantity="one">%1$d tip</item>
+        <item quantity="other">%1$d tips</item>
+    </plurals>
     <string name="balance_issue_two_classes">Add images to at least two classes to train a classifier.</string>
     <string name="balance_issue_empty_classes">No images yet: %1$s</string>
     <string name="balance_issue_few_images">Fewer than %1$d images: %2$s. More examples usually means a better model.</string>
@@ -121,6 +127,89 @@
     <string name="progress_preparing">Preparing…</string>
     <string name="progress_importing">Importing %1$d of %2$d images</string>
     <string name="progress_exporting">Exporting %1$d of %2$d images</string>
+    <string name="progress_converting">Converting %1$d of %2$d images</string>
+
+    <!-- Image settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_open">Settings</string>
+    <string name="settings_image_heading">Image settings for new datasets</string>
+    <string name="settings_image_body">New datasets store captured and imported images this way. Each dataset keeps its own copy, which you can change from its menu.</string>
+    <string name="action_save">Save</string>
+    <string name="action_discard">Discard</string>
+    <string name="action_not_now">Not now</string>
+    <string name="action_convert">Convert</string>
+    <string name="settings_discard_title">Discard changes?</string>
+    <string name="settings_discard_message">Your changes to the image settings haven’t been saved.</string>
+    <string name="message_settings_saved">Image settings saved</string>
+    <string name="image_size_label">Image size</string>
+    <string name="resize_original">Original</string>
+    <string name="resize_fit">Fit</string>
+    <string name="resize_square">Square</string>
+    <string name="resize_original_hint">Images keep their own dimensions.</string>
+    <string name="resize_fit_hint">Scaled down so the longest side is at most %1$d px, keeping the aspect ratio.</string>
+    <string name="resize_square_hint">Center-cropped to a square and scaled down to %1$d × %1$d px.</string>
+    <string name="size_px">%1$d px</string>
+    <string name="image_format_label">Format</string>
+    <string name="format_original">Original</string>
+    <string name="format_original_hint">Images keep their own format.</string>
+    <string name="format_jpeg_hint">Small files; best for photos.</string>
+    <string name="format_png_hint">Lossless, so files are larger.</string>
+    <string name="format_webp_hint">Smaller than JPEG at similar quality.</string>
+    <string name="compression_label">Compression quality</string>
+    <string name="compression_value">%1$d</string>
+    <string name="compression_high">High</string>
+    <string name="compression_balanced">Balanced</string>
+    <string name="compression_small">Small</string>
+    <string name="compression_unused_png">PNG is lossless, so quality doesn’t apply.</string>
+    <string name="compression_unused_original">Images are stored untouched, so quality doesn’t apply.</string>
+    <string name="settings_passthrough_note">Images are stored exactly as captured or imported.</string>
+    <string name="settings_lossy_note">Converting resizes and re-encodes images. Pixels removed this way can’t be restored.</string>
+    <string name="apply_existing_title">Apply to existing datasets?</string>
+    <string name="apply_existing_message">Choose datasets to switch to these settings. Their images will be converted and the stored files replaced. This can’t be undone, so export first if you want to keep the originals.</string>
+    <string name="dataset_image_settings">Image settings</string>
+    <string name="dataset_image_settings_body">Images added to this dataset are stored this way.</string>
+    <string name="dataset_use_defaults">Use app defaults</string>
+    <plurals name="dataset_convert_existing">
+        <item quantity="one">Also convert the %1$d image already in this dataset</item>
+        <item quantity="other">Also convert the %1$d images already in this dataset</item>
+    </plurals>
+    <plurals name="convert_confirm_title">
+        <item quantity="one">Convert %1$d image?</item>
+        <item quantity="other">Convert %1$d images?</item>
+    </plurals>
+    <string name="convert_confirm_message">Stored images will be replaced: %1$s. This can’t be undone, so export the dataset first if you want to keep the originals.</string>
+    <plurals name="outdated_images">
+        <item quantity="one">%1$d image uses older image settings.</item>
+        <item quantity="other">%1$d images use older image settings.</item>
+    </plurals>
+    <plurals name="message_images_converted">
+        <item quantity="one">Converted %1$d image</item>
+        <item quantity="other">Converted %1$d images</item>
+    </plurals>
+    <plurals name="message_conversion_started">
+        <item quantity="one">Converting images in %1$d dataset</item>
+        <item quantity="other">Converting images in %1$d datasets</item>
+    </plurals>
+
+    <!-- Import preview -->
+    <string name="import_preview_title">Choose classes</string>
+    <string name="import_preview_body">This folder has folders inside class folders. Choose which folder names become classes.</string>
+    <string name="import_preview_body_splits">This dataset is split into %1$s folders.</string>
+    <string name="import_merge_splits">Merge %1$s into the same classes</string>
+    <string name="import_naming_label">Name classes after</string>
+    <string name="import_naming_top">Top folder</string>
+    <string name="import_naming_last">Last folder</string>
+    <string name="import_naming_full">Full path</string>
+    <string name="import_naming_example">For example “%1$s”</string>
+    <plurals name="import_class_count">
+        <item quantity="one">%1$d class</item>
+        <item quantity="other">%1$d classes</item>
+    </plurals>
+    <plurals name="import_loose_images">
+        <item quantity="one">%1$d image isn’t in a class folder and will be skipped.</item>
+        <item quantity="other">%1$d images aren’t in a class folder and will be skipped.</item>
+    </plurals>
+    <string name="action_import">Import</string>
 
     <!-- Errors -->
     <string name="error_not_found">That dataset no longer exists.</string>
