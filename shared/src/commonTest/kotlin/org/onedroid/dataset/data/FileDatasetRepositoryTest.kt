@@ -38,11 +38,11 @@ class FileDatasetRepositoryTest {
     private suspend fun dataset(id: String): Dataset = requireNotNull(repository.observeDataset(id).first())
 
     @Test
-    fun newDatasetHasTwoStarterClasses() = runTest {
+    fun newDatasetHasOneStarterClass() = runTest {
         val id = repository.createDataset("Animals").value()
         val dataset = dataset(id)
         assertEquals("Animals", dataset.name)
-        assertEquals(listOf("Class 1", "Class 2"), dataset.classes.map { it.name })
+        assertEquals(listOf("Class 1"), dataset.classes.map { it.name })
         assertEquals(1, repository.observeDatasets().first().size)
     }
 
@@ -84,6 +84,7 @@ class FileDatasetRepositoryTest {
     @Test
     fun moveAndDeleteImages() = runTest {
         val id = repository.createDataset("Animals").value()
+        repository.addClass(id, "Class 2").value()
         val (first, second) = dataset(id).classes
         repository.addImages(id, first.id, listOf(source(fakeJpeg("a")), source(fakeJpeg("b")))).value()
         val (a, b) = dataset(id).classes.first().imageIds
@@ -116,13 +117,14 @@ class FileDatasetRepositoryTest {
         ).value()
 
         val classes = dataset(id).classes
-        assertEquals(listOf("cat", "Class 2", "dog"), classes.map { it.name })
-        assertEquals(listOf(1, 0, 2), classes.map { it.imageIds.size })
+        assertEquals(listOf("cat", "dog"), classes.map { it.name })
+        assertEquals(listOf(1, 2), classes.map { it.imageIds.size })
     }
 
     @Test
     fun exportWritesDatasetFolderWithMetadata() = runTest {
         val id = repository.createDataset("Animal Dataset").value()
+        repository.addClass(id, "Class 2").value()
         val (cat, dog) = dataset(id).classes
         repository.renameClass(id, cat.id, "cat").value()
         repository.renameClass(id, dog.id, "dog").value()
@@ -153,6 +155,7 @@ class FileDatasetRepositoryTest {
     @Test
     fun exportedZipImportsAsANewDataset() = runTest {
         val id = repository.createDataset("Animal Dataset").value()
+        repository.addClass(id, "Class 2").value()
         val (first, second) = dataset(id).classes
         repository.addImages(id, first.id, listOf(source(fakeJpeg("a")), source(fakeJpeg("b")))).value()
         repository.addImages(id, second.id, listOf(source(fakePng("c")))).value()

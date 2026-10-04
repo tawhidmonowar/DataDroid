@@ -21,7 +21,7 @@ interface DatasetRepository {
     /** The dataset with [id], or null once it doesn't exist; emits again after any change to it. */
     fun observeDataset(id: String): Flow<Dataset?>
 
-    /** Creates an empty dataset with two starter classes and returns its id. */
+    /** Creates an empty dataset with one starter class and returns its id. */
     suspend fun createDataset(name: String): Result<String, DataError.Local>
 
     suspend fun renameDataset(id: String, name: String): EmptyResult<DataError.Local>

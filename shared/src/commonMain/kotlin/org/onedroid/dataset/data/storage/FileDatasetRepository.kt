@@ -79,7 +79,7 @@ class FileDatasetRepository(
     }
 
     override suspend fun createDataset(name: String): Result<String, DataError.Local> = catching {
-        locked { createLocked(name, listOf(STARTER_CLASS_1, STARTER_CLASS_2)) }
+        locked { createLocked(name, listOf(STARTER_CLASS)) }
     }
 
     override suspend fun renameDataset(id: String, name: String): EmptyResult<DataError.Local> = catching {
@@ -413,8 +413,7 @@ class FileDatasetRepository(
     private class NotFoundException : Exception()
 
     private companion object {
-        const val STARTER_CLASS_1 = "Class 1"
-        const val STARTER_CLASS_2 = "Class 2"
+        const val STARTER_CLASS = "Class 1"
         const val IMPORTED_NAME = "Imported dataset"
         const val THUMBNAIL_SIZE = 192
         const val SAVE_EVERY = 25

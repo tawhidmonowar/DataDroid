@@ -78,7 +78,6 @@ import org.onedroid.dataset.resources.dataset_rename
 import org.onedroid.dataset.resources.datasets_empty_body
 import org.onedroid.dataset.resources.datasets_empty_import
 import org.onedroid.dataset.resources.datasets_empty_title
-import org.onedroid.dataset.resources.datasets_heading
 import org.onedroid.dataset.resources.images_count
 
 private sealed interface DatasetDialog {
@@ -166,13 +165,6 @@ fun DatasetListScreen(
                                 modifier = Modifier.animateItem(),
                             )
                         }
-                    }
-                    item(key = "heading") {
-                        Text(
-                            stringResource(Res.string.datasets_heading),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.animateItem().padding(bottom = 4.dp),
-                        )
                     }
                     items(state.datasets, key = { it.id }) { item ->
                         DatasetCard(
