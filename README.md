@@ -1,31 +1,53 @@
-This is a Kotlin Multiplatform project targeting Android, iOS.
+# DataDroid
 
-* [/iosApp](./iosApp/iosApp) contains an iOS application. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+DataDroid is a cross-platform, on-device image dataset studio built with Kotlin Multiplatform and Compose
+Multiplatform. Create image classification datasets on Android and iOS, capture or import images per class,
+check class balance, and export a ready-to-train zip.
 
-* [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./shared/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-    folder is the appropriate location.
+## Features
 
-### Running the apps
+- **Datasets**: create, rename, delete; each starts with two classes.
+- **Classes**: add, rename inline, clear, delete. Class names are unique per dataset.
+- **Images**: capture with the camera (hold to record, ~5 frames/s, 640×640 square), pick from the photo
+  library, add a folder to a class, or import a folder or zip of class folders (merged by class name).
+  Originals are kept unchanged; files that aren't decodable images are skipped.
+- **Review**: thumbnail strip per class, full image viewer, and a per-class gallery with multi-select to
+  move or delete images.
+- **Class balance**: image counts, per-class bars, and warnings for empty, small (<20 images) or
+  imbalanced (largest ≥ 1.5× smallest) classes.
+- **Export**: a zip of the dataset folder, shared through the system share sheet:
 
-Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and options:
+  ```
+  Animal_Dataset/
+  ├── metadata.json      {"name": "Animal Dataset", "classes": ["cat", "dog", "bird"], "imageCount": 2438}
+  ├── cat/cat_0001.jpg
+  ├── dog/dog_0001.png
+  └── bird/bird_0001.jpg
+  ```
 
-- Android app: `./gradlew :androidApp:assembleDebug`
-- iOS app: open the [/iosApp](./iosApp) directory in Xcode and run it from there.
+  Empty classes are left out. The same zips (or any zip of class folders) can be imported as a new dataset.
 
-### Running tests
+## Architecture
 
-Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
+Single `shared` module, layered by package under `org.onedroid.dataset`:
 
-- Android tests: `./gradlew :shared:testAndroidHostTest`
-- iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
+| Package | Contents |
+|---|---|
+| `core` | `Result`/`DataError` typed errors, `UiText`, `ObserveAsEvents` |
+| `domain` | Models, `DatasetRepository` interface, use cases (class balance, name validation, folder grouping, export naming) |
+| `data` | `FileDatasetRepository` (JSON record + image files per dataset), streaming `ZipWriter`, `ZipReader`, exporter/importer |
+| `presentation` | MVI screens (`State`/`Action`/`Event`/`ViewModel`, `Root` + `Screen` composables), theme, components, type-safe navigation |
+| `platform` | `expect`/`actual` camera (CameraX / AVFoundation), pickers, share sheet, image codecs |
+| `di` | Koin modules; `initKoin` is called from `DataDroidApplication` (Android) and `iOSApp.init` (iOS) |
 
----
+Storage: `<app files>/datasets/<id>/dataset.json`, `images/<imageId>.<ext>`, `thumbs/<imageId>.jpg`.
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+## Running
+
+- Android: `./gradlew :androidApp:assembleDebug`
+- iOS: open [/iosApp](./iosApp) in Xcode and run.
+
+## Tests
+
+- JVM: `./gradlew :shared:testAndroidHostTest`
+- iOS simulator: `./gradlew :shared:iosSimulatorArm64Test`
