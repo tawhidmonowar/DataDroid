@@ -1,8 +1,8 @@
 package org.onedroid.dataset.domain.usecase
 
-import org.onedroid.dataset.core.domain.EmptyResult
-import org.onedroid.dataset.core.domain.Error
-import org.onedroid.dataset.core.domain.Result
+import org.onedroid.dataset.domain.EmptyResult
+import org.onedroid.dataset.domain.Error
+import org.onedroid.dataset.domain.Result
 
 enum class NameError : Error {
     BLANK,

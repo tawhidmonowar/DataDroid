@@ -52,9 +52,9 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import org.onedroid.dataset.domain.usecase.ClassMatch
 import org.onedroid.dataset.domain.usecase.uniqueName
-import org.onedroid.dataset.platform.camera.CameraFacing
-import org.onedroid.dataset.platform.image.decodeSquare
-import org.onedroid.dataset.platform.image.toImageBitmap
+import org.onedroid.dataset.core.platform.camera.CameraFacing
+import org.onedroid.dataset.core.platform.image.decodeSquare
+import org.onedroid.dataset.core.platform.image.toImageBitmap
 import org.onedroid.dataset.presentation.components.AppIcons
 import org.onedroid.dataset.presentation.components.NameDialog
 import org.onedroid.dataset.presentation.theme.classColor

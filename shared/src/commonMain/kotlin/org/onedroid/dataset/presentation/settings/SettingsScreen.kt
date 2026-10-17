@@ -49,7 +49,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
-import org.onedroid.dataset.core.presentation.ObserveAsEvents
+import org.onedroid.dataset.presentation.components.ObserveAsEvents
 import org.onedroid.dataset.presentation.components.AppIcons
 import org.onedroid.dataset.presentation.components.ConfirmDialog
 import org.onedroid.dataset.presentation.theme.DataDroidTheme

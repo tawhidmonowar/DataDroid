@@ -20,9 +20,9 @@ import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readByteArray
 import kotlinx.io.readFloat
 import kotlinx.io.writeFloat
-import org.onedroid.dataset.core.domain.DataError
-import org.onedroid.dataset.core.domain.Result
-import org.onedroid.dataset.core.domain.getOrNull
+import org.onedroid.dataset.domain.DataError
+import org.onedroid.dataset.domain.Result
+import org.onedroid.dataset.domain.getOrNull
 import org.onedroid.dataset.data.image.ImageProcessor
 import org.onedroid.dataset.data.storage.DatasetFiles
 import org.onedroid.dataset.data.storage.StoragePaths
@@ -32,11 +32,11 @@ import org.onedroid.dataset.domain.repository.DatasetRepository
 import org.onedroid.dataset.domain.repository.ImageSorter
 import org.onedroid.dataset.domain.repository.ProgressListener
 import org.onedroid.dataset.domain.usecase.ClassMatcher
-import org.onedroid.dataset.platform.image.RgbImage
-import org.onedroid.dataset.platform.image.decodeSquare
-import org.onedroid.dataset.platform.ml.FeatureExtractor
-import org.onedroid.dataset.platform.ml.MobileNetV3Small
-import org.onedroid.dataset.platform.ml.SharedBackbone
+import org.onedroid.dataset.core.platform.image.RgbImage
+import org.onedroid.dataset.core.platform.image.decodeSquare
+import org.onedroid.dataset.core.platform.ml.FeatureExtractor
+import org.onedroid.dataset.core.platform.ml.MobileNetV3Small
+import org.onedroid.dataset.core.platform.ml.SharedBackbone
 
 /**
  * Sorts images by comparing MobileNet embeddings. Each image's embedding is cached in its dataset's

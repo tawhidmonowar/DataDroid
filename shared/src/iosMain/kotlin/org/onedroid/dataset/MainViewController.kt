@@ -1,7 +1,7 @@
 package org.onedroid.dataset
 
 import androidx.compose.ui.window.ComposeUIViewController
-import org.onedroid.dataset.di.initKoin
+import org.onedroid.dataset.core.di.initKoin
 
 fun MainViewController() = ComposeUIViewController { App() }
 

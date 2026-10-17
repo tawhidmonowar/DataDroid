@@ -1,6 +1,6 @@
 package org.onedroid.dataset.presentation.detail
 
-import org.onedroid.dataset.core.presentation.UiText
+import org.onedroid.dataset.presentation.components.UiText
 import org.onedroid.dataset.domain.model.ClassBalance
 import org.onedroid.dataset.domain.model.DatasetClass
 import org.onedroid.dataset.domain.model.ExportedFile
@@ -10,9 +10,9 @@ import org.onedroid.dataset.domain.usecase.ClassMatch
 import org.onedroid.dataset.domain.usecase.ClassMatcher
 import org.onedroid.dataset.domain.usecase.ClassNaming
 import org.onedroid.dataset.domain.usecase.computeClassBalance
-import org.onedroid.dataset.platform.camera.CameraFacing
-import org.onedroid.dataset.platform.picker.PickedFile
-import org.onedroid.dataset.platform.picker.PickedFolder
+import org.onedroid.dataset.core.platform.camera.CameraFacing
+import org.onedroid.dataset.core.platform.picker.PickedFile
+import org.onedroid.dataset.core.platform.picker.PickedFolder
 import org.onedroid.dataset.presentation.components.ImportPreviewUi
 import org.onedroid.dataset.presentation.components.TransferUi
 

@@ -3,14 +3,14 @@ package org.onedroid.dataset.data.image
 import org.onedroid.dataset.domain.model.ImageSettings
 import org.onedroid.dataset.domain.model.OutputFormat
 import org.onedroid.dataset.domain.model.ResizeMode
-import org.onedroid.dataset.platform.image.RgbImage
-import org.onedroid.dataset.platform.image.canEncodeWebp
-import org.onedroid.dataset.platform.image.decodeFitted
-import org.onedroid.dataset.platform.image.decodeSquare
-import org.onedroid.dataset.platform.image.encodeJpeg
-import org.onedroid.dataset.platform.image.encodePng
-import org.onedroid.dataset.platform.image.encodeWebp
-import org.onedroid.dataset.platform.image.imageDimensions
+import org.onedroid.dataset.core.platform.image.RgbImage
+import org.onedroid.dataset.core.platform.image.canEncodeWebp
+import org.onedroid.dataset.core.platform.image.decodeFitted
+import org.onedroid.dataset.core.platform.image.decodeSquare
+import org.onedroid.dataset.core.platform.image.encodeJpeg
+import org.onedroid.dataset.core.platform.image.encodePng
+import org.onedroid.dataset.core.platform.image.encodeWebp
+import org.onedroid.dataset.core.platform.image.imageDimensions
 import kotlin.math.min
 
 /** An image written in some format; [extension] names the format. */

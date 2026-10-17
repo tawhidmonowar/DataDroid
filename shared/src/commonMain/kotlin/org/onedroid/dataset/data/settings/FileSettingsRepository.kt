@@ -20,9 +20,9 @@ import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readByteArray
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import org.onedroid.dataset.core.domain.DataError
-import org.onedroid.dataset.core.domain.EmptyResult
-import org.onedroid.dataset.core.domain.Result
+import org.onedroid.dataset.domain.DataError
+import org.onedroid.dataset.domain.EmptyResult
+import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.data.storage.writeAtomically
 import org.onedroid.dataset.domain.model.ImageSettings
 import org.onedroid.dataset.domain.repository.SettingsRepository

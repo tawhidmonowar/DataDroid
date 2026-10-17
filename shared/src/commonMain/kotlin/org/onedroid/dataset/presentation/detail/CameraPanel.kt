@@ -29,8 +29,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.stringResource
-import org.onedroid.dataset.platform.camera.CameraFacing
-import org.onedroid.dataset.platform.camera.CameraPreview
+import org.onedroid.dataset.core.platform.camera.CameraFacing
+import org.onedroid.dataset.core.platform.camera.CameraPreview
 import org.onedroid.dataset.presentation.components.AppIcons
 import org.onedroid.dataset.resources.Res
 import org.onedroid.dataset.resources.action_close

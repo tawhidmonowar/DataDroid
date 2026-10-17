@@ -1,10 +1,10 @@
 package org.onedroid.dataset.presentation.datasets
 
-import org.onedroid.dataset.core.presentation.UiText
+import org.onedroid.dataset.presentation.components.UiText
 import org.onedroid.dataset.domain.model.DatasetSummary
 import org.onedroid.dataset.domain.model.ExportedFile
 import org.onedroid.dataset.domain.usecase.ClassNaming
-import org.onedroid.dataset.platform.picker.PickedFile
+import org.onedroid.dataset.core.platform.picker.PickedFile
 import org.onedroid.dataset.presentation.components.ImportPreviewUi
 import org.onedroid.dataset.presentation.components.TransferUi
 

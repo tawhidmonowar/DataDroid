@@ -1,6 +1,5 @@
 package org.onedroid.dataset.domain
 
-import org.onedroid.dataset.core.domain.Result
 import org.onedroid.dataset.domain.model.BalanceIssue
 import org.onedroid.dataset.domain.model.DatasetClass
 import org.onedroid.dataset.domain.model.LabeledImage
