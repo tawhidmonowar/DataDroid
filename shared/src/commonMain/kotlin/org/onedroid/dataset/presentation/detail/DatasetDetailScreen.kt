@@ -94,6 +94,9 @@ import org.onedroid.dataset.resources.images_count
 private sealed interface PickTarget {
     data class Class(val classId: Int) : PickTarget
     data object Dataset : PickTarget
+
+    /** Picked images are sorted into classes automatically. */
+    data object AutoSort : PickTarget
 }
 
 @Composable
@@ -112,12 +115,17 @@ fun DatasetDetailRoot(
     // One launcher per picker for the whole screen, so it survives while the system picker is open.
     var pickTarget by remember { mutableStateOf<PickTarget>(PickTarget.Dataset) }
     val pickImages = rememberImagePicker { images ->
-        (pickTarget as? PickTarget.Class)?.let { viewModel.onAction(DatasetDetailAction.OnImagesPicked(it.classId, images)) }
+        when (val target = pickTarget) {
+            is PickTarget.Class -> viewModel.onAction(DatasetDetailAction.OnImagesPicked(target.classId, images))
+            PickTarget.AutoSort -> viewModel.onAction(DatasetDetailAction.OnAutoSortImagesPicked(images))
+            PickTarget.Dataset -> Unit
+        }
     }
     val pickFolder = rememberFolderPicker { folder ->
         when (val target = pickTarget) {
             is PickTarget.Class -> viewModel.onAction(DatasetDetailAction.OnClassFolderPicked(target.classId, folder))
             PickTarget.Dataset -> viewModel.onAction(DatasetDetailAction.OnDatasetFolderPicked(folder))
+            PickTarget.AutoSort -> Unit
         }
     }
     val pickZip = rememberArchivePicker { viewModel.onAction(DatasetDetailAction.OnDatasetZipPicked(it)) }
@@ -131,7 +139,7 @@ fun DatasetDetailRoot(
                 // Let the new class reach the list before scrolling to it.
                 withFrameNanos { }
                 val index = currentState.classes.indexOfFirst { it.id == event.classId }
-                if (index >= 0) listState.animateScrollToItem(index + if (currentState.showsBanner) 1 else 0)
+                if (index >= 0) listState.animateScrollToItem(index + currentState.firstClassIndex)
             }
         }
     }
@@ -152,6 +160,10 @@ fun DatasetDetailRoot(
             pickFolder()
         },
         onPickDatasetZip = pickZip,
+        onPickAutoSortPhotos = {
+            pickTarget = PickTarget.AutoSort
+            pickImages()
+        },
         listState = listState,
         snackbar = snackbar,
     )
@@ -166,6 +178,7 @@ fun DatasetDetailScreen(
     onPickClassFolder: (classId: Int) -> Unit = {},
     onPickDatasetFolder: () -> Unit = {},
     onPickDatasetZip: () -> Unit = {},
+    onPickAutoSortPhotos: () -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
 ) {
@@ -182,10 +195,10 @@ fun DatasetDetailScreen(
     // Shrinks to its icon while scrolling down the classes, and grows back when scrolling up.
     val fabExpanded by remember { derivedStateOf { !listState.canScrollBackward || listState.lastScrolledBackward } }
     // Hidden while the camera is open, where it would cover the record button.
-    val showFab = !state.loading && state.canEdit && state.cameraClassId == null
+    val showFab = !state.loading && state.canEdit && !state.cameraOpen
     val scrollToClass = { classId: Int ->
         val index = state.classes.indexOfFirst { it.id == classId }
-        if (index >= 0) scope.launch { listState.animateScrollToItem(index + if (state.showsBanner) 1 else 0) }
+        if (index >= 0) scope.launch { listState.animateScrollToItem(index + state.firstClassIndex) }
     }
 
     BoxWithConstraints {
@@ -236,6 +249,7 @@ fun DatasetDetailScreen(
                         onAction = onAction,
                         onPickImages = onPickImages,
                         onPickClassFolder = onPickClassFolder,
+                        onPickAutoSortPhotos = onPickAutoSortPhotos,
                         onOpenImage = { openImage = it },
                         onViewAll = { galleryClassId = it },
                         onClearClass = { clearingClass = it },
@@ -418,6 +432,7 @@ private fun DatasetContent(
     onAction: (DatasetDetailAction) -> Unit,
     onPickImages: (Int) -> Unit,
     onPickClassFolder: (Int) -> Unit,
+    onPickAutoSortPhotos: () -> Unit,
     onOpenImage: (Long) -> Unit,
     onViewAll: (Int) -> Unit,
     onClearClass: (ClassUi) -> Unit,
@@ -457,6 +472,29 @@ private fun DatasetContent(
             }
         }
     }
+    val autoSort: LazyListScope.() -> Unit = {
+        item(key = "auto-sort") {
+            val autoSortUi = state.autoSort
+            if (autoSortUi == null) {
+                AutoSortEntryCard(
+                    enabled = state.canEdit,
+                    onOpen = { onAction(DatasetDetailAction.OnOpenAutoSort) },
+                    modifier = Modifier.animateItem(),
+                )
+            } else {
+                AutoSortCard(
+                    autoSort = autoSortUi,
+                    classes = state.classes,
+                    facing = state.cameraFacing,
+                    recording = state.recording,
+                    enabled = state.canEdit,
+                    onAction = onAction,
+                    onPickPhotos = onPickAutoSortPhotos,
+                    modifier = Modifier.animateItem(),
+                )
+            }
+        }
+    }
     val classes: LazyListScope.() -> Unit = {
         classItems(state, onAction, onPickImages, onPickClassFolder, onOpenImage, onViewAll, onClearClass, onDeleteClass)
     }
@@ -470,6 +508,7 @@ private fun DatasetContent(
             Box(Modifier.weight(1.3f).fillMaxHeight()) {
                 LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = listPadding, verticalArrangement = spacing) {
                     banner()
+                    autoSort()
                     classes()
                 }
                 Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) { addClassButton() }
@@ -490,6 +529,7 @@ private fun DatasetContent(
             BalanceSummaryStrip(state.balance, onClick = onShowBalance)
             LazyColumn(Modifier.widthIn(max = 672.dp).fillMaxWidth().weight(1f), state = listState, contentPadding = listPadding, verticalArrangement = spacing) {
                 banner()
+                autoSort()
                 classes()
             }
         }
@@ -537,8 +577,8 @@ private fun LazyListScope.classItems(
                 {
                     CameraPanel(
                         facing = state.cameraFacing,
-                        // Frames are only converted while recording.
-                        onCapture = if (state.recording) { jpeg -> onAction(DatasetDetailAction.OnCapture(jpeg)) } else null,
+                        // Frames are only converted while capturing.
+                        onCapture = if (state.capturing) { jpeg -> onAction(DatasetDetailAction.OnCapture(jpeg)) } else null,
                         onFlip = { onAction(DatasetDetailAction.OnFlipCamera) },
                         onClose = { onAction(DatasetDetailAction.OnCloseCamera) },
                     ) {

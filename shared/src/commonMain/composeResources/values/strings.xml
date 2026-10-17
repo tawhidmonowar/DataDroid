@@ -53,7 +53,7 @@
         <item quantity="one">%1$d Image Sample</item>
         <item quantity="other">%1$d Image Samples</item>
     </plurals>
-    <string name="class_capture_hint">Hold the button below to capture images</string>
+    <string name="class_capture_hint">Tap the button below for one image, or hold it to record</string>
     <string name="class_name_label">Class name</string>
     <string name="class_view_all">View all images</string>
     <string name="class_folder">Folder</string>
@@ -73,6 +73,43 @@
         <item quantity="one">%1$d file wasn’t a readable image and was skipped</item>
         <item quantity="other">%1$d files weren’t readable images and were skipped</item>
     </plurals>
+
+    <plurals name="message_images_sorted">
+        <item quantity="one">Sorted %1$d image into its class</item>
+        <item quantity="other">Sorted %1$d images into their classes</item>
+    </plurals>
+    <plurals name="message_images_unmatched">
+        <item quantity="one">%1$d image didn’t match any class</item>
+        <item quantity="other">%1$d images didn’t match any class</item>
+    </plurals>
+
+    <!-- Auto-sort -->
+    <string name="auto_sort_title">Auto-sort</string>
+    <string name="auto_sort_body">Capture without choosing a class. Each image is saved to the class it looks like.</string>
+    <string name="auto_sort_start">Start</string>
+    <string name="auto_sort_photos">Sort photos from library</string>
+    <string name="auto_sort_preparing">Getting ready…</string>
+    <string name="auto_sort_preparing_count">Learning your classes: %1$d of %2$d images</string>
+    <string name="auto_sort_point">Point the camera at something to see which class it goes to.</string>
+    <string name="auto_sort_no_classes">No class has images yet. Capture something: it waits under Unknown so you can start a class with it.</string>
+    <string name="auto_sort_similar">%1$s similar</string>
+    <string name="auto_sort_closest">Closest: %1$s, %2$s similar</string>
+    <string name="auto_sort_saved">Saved since you opened the camera</string>
+    <string name="auto_sort_strictness">Unknown detection</string>
+    <string name="auto_sort_strictness_off">Off</string>
+    <string name="auto_sort_strictness_hint">Higher is stricter: images must look more like a class to go to it, others wait under Unknown.</string>
+    <string name="auto_sort_strictness_off_hint">Every image goes to its closest class.</string>
+    <string name="unknown_label">Unknown</string>
+    <plurals name="unknown_title">
+        <item quantity="one">%1$d unknown image</item>
+        <item quantity="other">%1$d unknown images</item>
+    </plurals>
+    <string name="unknown_body">These don’t match any class. Start a new class with them, or add them to an existing one.</string>
+    <string name="unknown_new_class">New class</string>
+    <string name="unknown_new_class_title">New class for unknown images</string>
+    <string name="unknown_add_to">Add to…</string>
+    <string name="unknown_discard">Discard</string>
+    <string name="unknown_remove">Remove image</string>
 
     <!-- Image viewer and gallery -->
     <string name="image_delete">Delete image</string>
@@ -95,7 +132,7 @@
     <string name="camera_denied">Camera access is off. Enable it for this app in Settings.</string>
     <string name="camera_unavailable">This camera isn’t available on this device.</string>
     <string name="camera_switch">Switch camera</string>
-    <string name="camera_hold_to_record">Hold to Record</string>
+    <string name="camera_hold_to_record">Tap or Hold to Capture</string>
     <string name="camera_recording">Recording…</string>
 
     <!-- Class balance -->
@@ -128,6 +165,7 @@
     <string name="progress_importing">Importing %1$d of %2$d images</string>
     <string name="progress_exporting">Exporting %1$d of %2$d images</string>
     <string name="progress_converting">Converting %1$d of %2$d images</string>
+    <string name="progress_sorting">Sorting %1$d of %2$d images</string>
 
     <!-- Image settings -->
     <string name="settings_title">Settings</string>
@@ -220,6 +258,7 @@
     <string name="error_archive_too_large">That file is too large to import.</string>
     <string name="error_archive_no_images">No class folders with images were found.</string>
     <string name="error_archive_empty_dataset">Add some images before exporting.</string>
+    <string name="error_sorting_unavailable">Auto-sort isn’t available on this device.</string>
     <string name="error_name_blank">Enter a name.</string>
     <string name="error_name_too_long">Use at most %1$d characters.</string>
     <string name="error_name_duplicate">That name is already used.</string>

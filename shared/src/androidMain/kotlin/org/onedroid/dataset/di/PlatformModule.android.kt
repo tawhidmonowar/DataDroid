@@ -5,6 +5,8 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import org.onedroid.dataset.data.storage.StoragePaths
+import org.onedroid.dataset.platform.ml.BackboneLoader
+import org.onedroid.dataset.platform.ml.AndroidBackboneLoader
 
 actual val platformModule: Module = module {
     single {
@@ -16,4 +18,5 @@ actual val platformModule: Module = module {
             settingsFile = Path(context.filesDir.absolutePath, "settings.json"),
         )
     }
+    single<BackboneLoader> { AndroidBackboneLoader }
 }

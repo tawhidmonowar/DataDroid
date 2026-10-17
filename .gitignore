@@ -33,3 +33,6 @@ google-services.json
 *.hprof
 /.kotlin
 .DS_Store
+
+# Downloaded native dependencies (see shared/build.gradle.kts)
+third_party/

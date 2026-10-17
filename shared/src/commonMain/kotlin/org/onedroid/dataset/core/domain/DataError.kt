@@ -18,4 +18,10 @@ sealed interface DataError : Error {
         EMPTY_DATASET,
         UNKNOWN,
     }
+
+    /** Failures sorting images into classes automatically. */
+    enum class Sorting : DataError {
+        /** The on-device image model couldn't be loaded. */
+        MODEL_UNAVAILABLE,
+    }
 }

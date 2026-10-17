@@ -5,6 +5,8 @@ import kotlinx.io.files.Path
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import org.onedroid.dataset.data.storage.StoragePaths
+import org.onedroid.dataset.platform.ml.BackboneLoader
+import org.onedroid.dataset.platform.ml.IosBackboneLoader
 import platform.Foundation.NSApplicationSupportDirectory
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSTemporaryDirectory
@@ -27,4 +29,5 @@ actual val platformModule: Module = module {
             settingsFile = Path(base, "settings.json"),
         )
     }
+    single<BackboneLoader> { IosBackboneLoader }
 }

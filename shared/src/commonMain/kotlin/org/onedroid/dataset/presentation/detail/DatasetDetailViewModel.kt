@@ -8,14 +8,18 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import org.onedroid.dataset.core.domain.DataError
 import org.onedroid.dataset.core.domain.Result
 import org.onedroid.dataset.core.domain.onFailure
@@ -28,7 +32,10 @@ import org.onedroid.dataset.domain.model.ImageSource
 import org.onedroid.dataset.domain.model.ImportResult
 import org.onedroid.dataset.domain.model.LabeledImage
 import org.onedroid.dataset.domain.repository.DatasetRepository
+import org.onedroid.dataset.domain.repository.ImageSorter
 import org.onedroid.dataset.domain.repository.SettingsRepository
+import org.onedroid.dataset.domain.usecase.ClassMatch
+import org.onedroid.dataset.domain.usecase.ClassMatcher
 import org.onedroid.dataset.domain.usecase.ImageConversions
 import org.onedroid.dataset.domain.usecase.ImageFolders
 import org.onedroid.dataset.domain.usecase.computeClassBalance
@@ -46,6 +53,8 @@ import org.onedroid.dataset.resources.class_default_name
 import org.onedroid.dataset.resources.message_images_added
 import org.onedroid.dataset.resources.message_images_converted
 import org.onedroid.dataset.resources.message_images_skipped
+import org.onedroid.dataset.resources.message_images_sorted
+import org.onedroid.dataset.resources.message_images_unmatched
 import org.jetbrains.compose.resources.getString
 
 class DatasetDetailViewModel(
@@ -53,6 +62,7 @@ class DatasetDetailViewModel(
     private val repository: DatasetRepository,
     private val settingsRepository: SettingsRepository,
     private val conversions: ImageConversions,
+    private val sorter: ImageSorter,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DatasetDetailState(datasetId))
@@ -65,6 +75,18 @@ class DatasetDetailViewModel(
     private val captures = Channel<Pair<Int, ByteArray>>(capacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private var transferJob: Job? = null
+
+    /** The latest dataset, which the auto-sort matcher follows. */
+    private val dataset = MutableStateFlow<Dataset?>(null)
+
+    /** Auto-sort: the open camera's work, and the matcher fitted to the dataset's current images. */
+    private var autoSortJob: Job? = null
+    private var matcher: ClassMatcher? = null
+
+    /** Auto-sort frames to save, and the latest frame to preview (dropped while sorting is busy). */
+    private val autoCaptures = Channel<ByteArray>(capacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val previewFrames = Channel<ByteArray>(Channel.CONFLATED)
+    private var nextUnknownId = 0L
 
     init {
         repository.observeDataset(datasetId)
@@ -109,17 +131,31 @@ class DatasetDetailViewModel(
                 val imageIds = _state.value.classes.firstOrNull { it.id == action.classId }?.imageIds.orEmpty().toSet()
                 if (imageIds.isNotEmpty()) launchEdit { repository.deleteImages(datasetId, imageIds) }
             }
-            is DatasetDetailAction.OnOpenCamera -> _state.update { it.copy(cameraClassId = action.classId, recording = false) }
-            DatasetDetailAction.OnCloseCamera -> _state.update { it.copy(cameraClassId = null, recording = false) }
+            is DatasetDetailAction.OnOpenCamera -> {
+                closeAutoSort()
+                _state.update { it.copy(cameraClassId = action.classId, recording = false, shotPending = false) }
+            }
+            DatasetDetailAction.OnCloseCamera -> _state.update { it.copy(cameraClassId = null, recording = false, shotPending = false) }
             DatasetDetailAction.OnFlipCamera -> _state.update {
                 it.copy(cameraFacing = if (it.cameraFacing == CameraFacing.Back) CameraFacing.Front else CameraFacing.Back)
             }
-            DatasetDetailAction.OnStartRecording -> _state.update { it.copy(recording = it.cameraClassId != null && it.canEdit) }
+            DatasetDetailAction.OnStartRecording -> _state.update {
+                // A tap shorter than the frame interval still captures the next frame.
+                val canCapture = it.canEdit && (it.cameraClassId != null || it.autoSort?.ready == true)
+                it.copy(recording = canCapture, shotPending = canCapture)
+            }
             DatasetDetailAction.OnStopRecording -> _state.update { it.copy(recording = false) }
-            is DatasetDetailAction.OnCapture -> {
-                val current = _state.value
-                val classId = current.cameraClassId
-                if (current.recording && classId != null) captures.trySend(classId to action.jpeg)
+            is DatasetDetailAction.OnCapture -> onCapture(action.jpeg)
+            DatasetDetailAction.OnOpenAutoSort -> openAutoSort()
+            DatasetDetailAction.OnCloseAutoSort -> closeAutoSort()
+            is DatasetDetailAction.OnStrictnessChange -> updateAutoSort { it.copy(strictness = action.strictness.coerceIn(0, 100)) }
+            is DatasetDetailAction.OnAutoSortImagesPicked -> sortPickedImages(action.images)
+            is DatasetDetailAction.OnUnknownsToNewClass -> fileUnknownsInNewClass(action.name, action.imageIds)
+            is DatasetDetailAction.OnUnknownsToClass -> fileUnknowns(action.imageIds) { onProgress, sources ->
+                repository.addImages(datasetId, action.classId, sources, onProgress)
+            }
+            is DatasetDetailAction.OnDiscardUnknowns -> updateAutoSort { autoSort ->
+                autoSort.copy(unknowns = autoSort.unknowns.filterNot { action.imageIds == null || it.id in action.imageIds })
             }
             is DatasetDetailAction.OnImagesPicked -> runImport { onProgress ->
                 repository.addImages(datasetId, action.classId, action.images, onProgress)
@@ -162,6 +198,7 @@ class DatasetDetailViewModel(
     }
 
     private fun onDataset(dataset: Dataset) {
+        this.dataset.value = dataset
         _state.update { state ->
             val classes = dataset.classes.mapIndexed { index, c -> c.toClassUi(index) }
             // Close the camera if its class was deleted.
@@ -172,7 +209,7 @@ class DatasetDetailViewModel(
                 classes = classes,
                 balance = computeClassBalance(dataset.classes),
                 cameraClassId = if (cameraOpen) state.cameraClassId else null,
-                recording = state.recording && cameraOpen,
+                recording = state.recording && (cameraOpen || state.autoSort != null),
                 imageSettings = dataset.imageSettings,
                 outdatedImageCount = dataset.outdatedImageCount,
             )
@@ -208,6 +245,173 @@ class DatasetDetailViewModel(
             is Result.Error -> send(DatasetDetailEvent.ShowMessage(valid.error.toUiText()))
             is Result.Success -> launchEdit { repository.renameClass(datasetId, classId, name) }
         }
+    }
+
+    private fun onCapture(jpeg: ByteArray) {
+        // Frames arrive on the camera's thread; claim a pending single shot atomically.
+        val current = _state.getAndUpdate { if (it.shotPending) it.copy(shotPending = false) else it }
+        val save = current.capturing && current.canEdit
+        when {
+            current.autoSort != null -> if (save) autoCaptures.trySend(jpeg) else previewFrames.trySend(jpeg)
+            save && current.cameraClassId != null -> captures.trySend(current.cameraClassId to jpeg)
+        }
+    }
+
+    private fun openAutoSort() {
+        if (_state.value.autoSort != null) return
+        _state.update { it.copy(autoSort = AutoSortUi(), cameraClassId = null, recording = false, shotPending = false) }
+        // Frames left from an earlier session belong to it.
+        while (autoCaptures.tryReceive().isSuccess || previewFrames.tryReceive().isSuccess) Unit
+        matcher = null
+        autoSortJob = viewModelScope.launch {
+            launch { followDataset() }
+            sortFrames()
+        }
+    }
+
+    private fun closeAutoSort() {
+        autoSortJob?.cancel()
+        autoSortJob = null
+        matcher = null
+        _state.update { if (it.autoSort == null) it else it.copy(autoSort = null, recording = false, shotPending = false) }
+    }
+
+    /** Refits the matcher whenever the dataset changes, so new images and classes count straight away. */
+    private suspend fun followDataset() {
+        dataset.filterNotNull().conflate().collect { current ->
+            val first = matcher == null
+            sorter.matcherFor(current) { done, total ->
+                if (first) updateAutoSort { it.copy(prepared = done, toPrepare = total) }
+            }
+                .onSuccess { fitted ->
+                    matcher = fitted
+                    updateAutoSort { it.copy(preparing = false) }
+                }
+                .onFailure { updateAutoSort { it.copy(preparing = false, unavailable = true) } }
+        }
+    }
+
+    /** Sorts camera frames: saved ones go to their class (or the unknowns), others just update the preview. */
+    private suspend fun sortFrames() {
+        while (true) {
+            // Frames to save come first; a preview frame only when none is waiting.
+            val (jpeg, save) = select {
+                autoCaptures.onReceive { it to true }
+                previewFrames.onReceive { it to false }
+            }
+            val match = classify(jpeg) ?: continue
+            updateAutoSort { it.copy(prediction = match) }
+            if (save) file(match, preview = jpeg, source = ImageSource { jpeg })
+        }
+    }
+
+    /** Where [image] belongs, or null if sorting isn't ready or it isn't a decodable image. */
+    private suspend fun classify(image: ByteArray): ClassMatch? {
+        val fitted = matcher ?: return null
+        val strictness = _state.value.autoSort?.strictness ?: return null
+        return when (val embedded = sorter.embed(image)) {
+            is Result.Error -> {
+                updateAutoSort { it.copy(unavailable = true) }
+                null
+            }
+            is Result.Success -> embedded.data?.let { fitted.match(it, strictness) }
+        }
+    }
+
+    /** Saves a sorted image to its class, or holds it with the unknowns for the user to decide. */
+    private suspend fun file(match: ClassMatch, preview: ByteArray, source: ImageSource) {
+        val classId = match.classId
+        if (classId == null) {
+            updateAutoSort { autoSort ->
+                val unknown = UnknownImage(nextUnknownId++, preview, source)
+                autoSort.copy(unknowns = (autoSort.unknowns + unknown).takeLast(MAX_UNKNOWNS))
+            }
+            return
+        }
+        repository.addImages(datasetId, classId, listOf(source))
+            .onSuccess { result -> if (result.added > 0) countSorted(classId, result.added) }
+            .onFailure { showError(it) }
+    }
+
+    private fun countSorted(classId: Int, count: Int) =
+        updateAutoSort { it.copy(sorted = it.sorted + (classId to (it.sorted[classId] ?: 0) + count)) }
+
+    /** Sorts picked images: matches are saved to their classes, the rest join the unknowns. */
+    private fun sortPickedImages(images: List<ImageSource>) {
+        val fitted = matcher
+        if (fitted == null || _state.value.autoSort?.ready != true) return
+        runTransfer(TransferKind.SORT) {
+            val byClass = mutableMapOf<Int, MutableList<ImageSource>>()
+            var unmatched = 0
+            var skipped = 0
+            onProgress(0, images.size)
+            images.forEachIndexed { index, source ->
+                val bytes = try {
+                    source.read()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+                val match = bytes?.let { classify(it) }
+                val classId = match?.classId
+                when {
+                    match == null -> skipped++
+                    classId != null -> byClass.getOrPut(classId) { mutableListOf() } += source
+                    else -> {
+                        val preview = sorter.preview(bytes)
+                        if (preview == null) skipped++ else {
+                            unmatched++
+                            file(match, preview, source)
+                        }
+                    }
+                }
+                onProgress(index + 1, images.size)
+            }
+            var sorted = 0
+            for ((classId, sources) in byClass) {
+                repository.addImages(datasetId, classId, sources)
+                    .onSuccess { result ->
+                        sorted += result.added
+                        skipped += result.skipped
+                        countSorted(classId, result.added)
+                    }
+                    .onFailure { showError(it) }
+            }
+            if (sorted > 0) _events.send(DatasetDetailEvent.ShowMessage(UiText.Plural(Res.plurals.message_images_sorted, sorted, sorted)))
+            if (unmatched > 0) _events.send(DatasetDetailEvent.ShowMessage(UiText.Plural(Res.plurals.message_images_unmatched, unmatched, unmatched)))
+            if (skipped > 0) _events.send(DatasetDetailEvent.ShowMessage(UiText.Plural(Res.plurals.message_images_skipped, skipped, skipped)))
+        }
+    }
+
+    private fun fileUnknownsInNewClass(name: String, imageIds: Set<Long>?) {
+        val valid = validateName(name, _state.value.classes.map { it.name })
+        if (valid is Result.Error) return send(DatasetDetailEvent.ShowMessage(valid.error.toUiText()))
+        fileUnknowns(imageIds) { onProgress, sources ->
+            when (val created = repository.addClass(datasetId, name.trim())) {
+                is Result.Error -> created
+                is Result.Success -> repository.addImages(datasetId, created.data, sources, onProgress)
+            }
+        }
+    }
+
+    /** Saves the chosen unknowns with [save], and takes them off the list once they're saved. */
+    private fun fileUnknowns(
+        imageIds: Set<Long>?,
+        save: suspend (onProgress: (Int, Int) -> Unit, sources: List<ImageSource>) -> Result<ImportResult, DataError>,
+    ) {
+        val chosen = _state.value.autoSort?.unknowns.orEmpty().filter { imageIds == null || it.id in imageIds }
+        if (chosen.isEmpty()) return
+        runImport { onProgress ->
+            save(onProgress, chosen.map { it.source }).onSuccess {
+                val filed = chosen.map { it.id }.toSet()
+                updateAutoSort { autoSort -> autoSort.copy(unknowns = autoSort.unknowns.filterNot { it.id in filed }) }
+            }
+        }
+    }
+
+    private fun updateAutoSort(transform: (AutoSortUi) -> AutoSortUi) {
+        _state.update { state -> state.autoSort?.let { state.copy(autoSort = transform(it)) } ?: state }
     }
 
     private fun export() {
@@ -277,7 +481,7 @@ class DatasetDetailViewModel(
 
     private fun runTransfer(kind: TransferKind, block: suspend () -> Unit) {
         if (!_state.value.canEdit) return
-        _state.update { it.copy(transfer = TransferUi(kind), recording = false) }
+        _state.update { it.copy(transfer = TransferUi(kind), recording = false, shotPending = false) }
         transferJob = viewModelScope.launch {
             try {
                 block()
@@ -304,5 +508,8 @@ class DatasetDetailViewModel(
     private companion object {
         /** Archives are read into memory, so keep well below a typical heap. */
         const val MAX_ARCHIVE_BYTES = 256L shl 20
+
+        /** Unknown images held in memory at once; older ones make way for new. */
+        const val MAX_UNKNOWNS = 100
     }
 }

@@ -9,7 +9,13 @@ import org.koin.dsl.bind
 import org.koin.dsl.module
 import org.onedroid.dataset.data.image.ImageProcessor
 import org.onedroid.dataset.data.image.PlatformImageProcessor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import org.onedroid.dataset.data.sorting.EmbeddingImageSorter
+import org.onedroid.dataset.domain.repository.ImageSorter
+import org.onedroid.dataset.platform.ml.SharedBackbone
 import org.onedroid.dataset.data.settings.FileSettingsRepository
 import org.onedroid.dataset.data.storage.FileDatasetRepository
 import org.onedroid.dataset.data.storage.StoragePaths
@@ -22,7 +28,7 @@ import org.onedroid.dataset.presentation.detail.DatasetDetailViewModel
 import org.onedroid.dataset.presentation.settings.SettingsViewModel
 import org.koin.core.module.dsl.viewModel
 
-/** Platform specifics: where files are stored. */
+/** Platform specifics: where files are stored, and the on-device image model (a `BackboneLoader`). */
 expect val platformModule: Module
 
 val dataModule = module {
@@ -38,13 +44,16 @@ val dataModule = module {
         )
     }
     single { ImageConversions(get()) }
+    // Loaded on first use and kept for the app's lifetime; shared by every dataset.
+    single { SharedBackbone(loader = getOrNull(), scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)) }
+    single<ImageSorter> { EmbeddingImageSorter(paths = get(), repository = get(), backbone = get(), imageProcessor = get()) }
 }
 
 val presentationModule = module {
     singleOf(::ImageLoader)
     viewModelOf(::DatasetListViewModel)
     viewModelOf(::SettingsViewModel)
-    viewModel { (datasetId: String) -> DatasetDetailViewModel(datasetId, get(), get(), get()) }
+    viewModel { (datasetId: String) -> DatasetDetailViewModel(datasetId, get(), get(), get(), get()) }
 }
 
 /** Starts Koin once per process; [config] adds platform setup such as the Android context. */
