@@ -7,8 +7,8 @@ import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readByteArray
 import kotlinx.serialization.json.Json
-import org.onedroid.dataset.core.domain.DataError
-import org.onedroid.dataset.core.domain.Result
+import org.onedroid.dataset.domain.DataError
+import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.data.archive.ZipReader
 import org.onedroid.dataset.data.storage.DatasetMetadata
 import org.onedroid.dataset.data.storage.FileDatasetRepository

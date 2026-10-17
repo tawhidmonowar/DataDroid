@@ -11,7 +11,9 @@ import org.onedroid.dataset.presentation.theme.DataDroidTheme
 @Composable
 fun App() {
     DataDroidTheme {
-        CompositionLocalProvider(LocalImageLoader provides koinInject<ImageLoader>()) {
+        CompositionLocalProvider(
+            LocalImageLoader provides koinInject<ImageLoader>()
+        ) {
             AppNavHost()
         }
     }

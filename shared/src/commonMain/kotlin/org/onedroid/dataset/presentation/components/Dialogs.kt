@@ -21,8 +21,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.TextFieldValue
 import org.jetbrains.compose.resources.stringResource
-import org.onedroid.dataset.core.domain.Result
-import org.onedroid.dataset.core.presentation.UiText
+import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.domain.usecase.MAX_NAME_LENGTH
 import org.onedroid.dataset.domain.usecase.NameError
 import org.onedroid.dataset.domain.usecase.validateName

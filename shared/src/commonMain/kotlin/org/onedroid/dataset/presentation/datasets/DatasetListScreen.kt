@@ -51,7 +51,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
-import org.onedroid.dataset.core.presentation.ObserveAsEvents
+import org.onedroid.dataset.presentation.components.ObserveAsEvents
 import org.onedroid.dataset.presentation.components.AppIcons
 import org.onedroid.dataset.presentation.components.ConfirmDialog
 import org.onedroid.dataset.presentation.components.DatasetThumbnail
@@ -60,8 +60,8 @@ import org.onedroid.dataset.presentation.components.NameDialog
 import org.onedroid.dataset.presentation.components.ProgressBanner
 import org.onedroid.dataset.presentation.components.label
 import org.onedroid.dataset.presentation.theme.DataDroidTheme
-import org.onedroid.dataset.platform.picker.rememberArchivePicker
-import org.onedroid.dataset.platform.picker.rememberFileSharer
+import org.onedroid.dataset.core.platform.picker.rememberArchivePicker
+import org.onedroid.dataset.core.platform.picker.rememberFileSharer
 import org.onedroid.dataset.resources.Res
 import org.onedroid.dataset.resources.action_create
 import org.onedroid.dataset.resources.action_delete

@@ -12,8 +12,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.onedroid.dataset.core.domain.DataError
-import org.onedroid.dataset.core.domain.Result
+import org.onedroid.dataset.domain.DataError
+import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.domain.model.ImportResult
 import org.onedroid.dataset.domain.repository.DatasetRepository
 

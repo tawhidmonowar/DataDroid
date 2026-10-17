@@ -19,10 +19,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.onedroid.dataset.core.domain.getOrNull
+import org.onedroid.dataset.domain.getOrNull
 import org.onedroid.dataset.domain.repository.DatasetRepository
-import org.onedroid.dataset.platform.image.decodeFitted
-import org.onedroid.dataset.platform.image.toImageBitmap
+import org.onedroid.dataset.core.platform.image.decodeFitted
+import org.onedroid.dataset.core.platform.image.toImageBitmap
 
 /**
  * Decodes dataset images for display, keeping recently shown thumbnails in memory so scrolling back

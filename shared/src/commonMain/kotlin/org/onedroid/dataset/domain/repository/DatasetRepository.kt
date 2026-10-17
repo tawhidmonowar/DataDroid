@@ -1,9 +1,9 @@
 package org.onedroid.dataset.domain.repository
 
 import kotlinx.coroutines.flow.Flow
-import org.onedroid.dataset.core.domain.DataError
-import org.onedroid.dataset.core.domain.EmptyResult
-import org.onedroid.dataset.core.domain.Result
+import org.onedroid.dataset.domain.DataError
+import org.onedroid.dataset.domain.EmptyResult
+import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.domain.model.ArchiveContents
 import org.onedroid.dataset.domain.model.Dataset
 import org.onedroid.dataset.domain.model.DatasetSummary

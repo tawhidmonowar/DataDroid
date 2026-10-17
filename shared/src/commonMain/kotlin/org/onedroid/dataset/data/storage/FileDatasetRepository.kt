@@ -24,9 +24,9 @@ import kotlinx.io.files.FileSystem
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.serialization.SerializationException
-import org.onedroid.dataset.core.domain.DataError
-import org.onedroid.dataset.core.domain.EmptyResult
-import org.onedroid.dataset.core.domain.Result
+import org.onedroid.dataset.domain.DataError
+import org.onedroid.dataset.domain.EmptyResult
+import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.data.archive.ArchiveImporter
 import org.onedroid.dataset.data.archive.DatasetExporter
 import org.onedroid.dataset.data.archive.ZipTooLargeException

@@ -22,7 +22,7 @@ import org.jetbrains.compose.resources.stringResource
 import org.onedroid.dataset.domain.model.ImageSettings
 import org.onedroid.dataset.domain.model.OutputFormat
 import org.onedroid.dataset.domain.model.ResizeMode
-import org.onedroid.dataset.platform.image.canEncodeWebp
+import org.onedroid.dataset.core.platform.image.canEncodeWebp
 import org.onedroid.dataset.resources.Res
 import org.onedroid.dataset.resources.compression_balanced
 import org.onedroid.dataset.resources.compression_high

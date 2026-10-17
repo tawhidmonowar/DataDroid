@@ -9,10 +9,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.onedroid.dataset.core.domain.DataError
-import org.onedroid.dataset.core.domain.Result
-import org.onedroid.dataset.core.presentation.UiText
-import org.onedroid.dataset.core.presentation.toUiText
+import org.onedroid.dataset.domain.DataError
+import org.onedroid.dataset.domain.Result
+import org.onedroid.dataset.presentation.components.UiText
+import org.onedroid.dataset.presentation.components.toUiText
 import org.onedroid.dataset.domain.repository.DatasetRepository
 import org.onedroid.dataset.domain.repository.SettingsRepository
 import org.onedroid.dataset.domain.usecase.ImageConversions

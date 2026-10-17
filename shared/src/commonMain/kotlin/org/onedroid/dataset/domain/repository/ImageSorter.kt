@@ -1,7 +1,7 @@
 package org.onedroid.dataset.domain.repository
 
-import org.onedroid.dataset.core.domain.DataError
-import org.onedroid.dataset.core.domain.Result
+import org.onedroid.dataset.domain.DataError
+import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.domain.model.Dataset
 import org.onedroid.dataset.domain.usecase.ClassMatcher
 

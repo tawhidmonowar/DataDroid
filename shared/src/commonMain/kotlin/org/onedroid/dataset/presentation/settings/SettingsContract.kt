@@ -1,6 +1,6 @@
 package org.onedroid.dataset.presentation.settings
 
-import org.onedroid.dataset.core.presentation.UiText
+import org.onedroid.dataset.presentation.components.UiText
 import org.onedroid.dataset.domain.model.ImageSettings
 
 data class SettingsState(
