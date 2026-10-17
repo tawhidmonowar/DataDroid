@@ -33,8 +33,22 @@ android {
         versionName = "1.0"
     }
     packaging {
+        jniLibs {
+            // LiteRT's GPU accelerator (~3 MB per ABI); the image model runs on the CPU (XNNPACK).
+            excludes += "**/libLiteRtClGlAccelerator.so"
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+    splits {
+        // One APK per ABI for sideloading (a quarter of the size), plus a universal one. Play builds its own
+        // per-device splits from the app bundle.
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
         }
     }
     buildTypes {

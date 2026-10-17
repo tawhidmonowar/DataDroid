@@ -109,6 +109,43 @@ class EmbeddingImageSorterTest {
     }
 
     @Test
+    fun rememberedEmbeddingsAreNotComputedAgain() = runTest {
+        val id = repository.createDataset("Colors").value()
+        val classId = dataset(id).classes.single().id
+        val sorter = sorter()
+        val frames = listOf(fakeJpeg("red1"), fakeJpeg("red2"))
+        val embeddings = frames.map { sorter.embed(it).value()!! }
+        val calls = embedCalls
+
+        val result = repository.addImages(id, classId, frames.map { source(it) }).value()
+        assertEquals(dataset(id).classes.single().imageIds, result.imageIds)
+        sorter.remember(id, result.imageIds.zip(embeddings).toMap())
+
+        assertTrue(!sorter.matcherFor(dataset(id)).value().isEmpty)
+        assertEquals(calls, embedCalls)
+    }
+
+    @Test
+    fun aStaleSnapshotKeepsNewerRememberedEmbeddings() = runTest {
+        val id = repository.createDataset("Colors").value()
+        val classId = dataset(id).classes.single().id
+        val sorter = sorter()
+        repository.addImages(id, classId, listOf(source(fakeJpeg("red0"))))
+        val stale = dataset(id)
+        sorter.matcherFor(stale).value()
+
+        val embedding = sorter.embed(fakeJpeg("red1")).value()!!
+        val added = repository.addImages(id, classId, listOf(source(fakeJpeg("red1")))).value()
+        sorter.remember(id, mapOf(added.imageIds.single() to embedding))
+        // A refit that started before the image was added mustn't drop its embedding...
+        sorter.matcherFor(stale).value()
+        val calls = embedCalls
+        // ...so fitting the current dataset needn't embed it again.
+        sorter.matcherFor(dataset(id)).value()
+        assertEquals(calls, embedCalls)
+    }
+
+    @Test
     fun deletedImagesStopCounting() = runTest {
         val (id, red, blue) = redAndBlue()
         val sorter = sorter()

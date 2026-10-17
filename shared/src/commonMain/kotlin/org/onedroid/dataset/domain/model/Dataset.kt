@@ -42,8 +42,11 @@ class LabeledImage(val folders: List<String>, val name: String, val source: Imag
 /** A zip's images, unread, and the dataset name it suggests (from its `metadata.json` or wrapper folder). */
 class ArchiveContents(val name: String?, val images: List<LabeledImage>)
 
-/** Outcome of adding a batch of images: images that couldn't be decoded are [skipped]. */
-data class ImportResult(val added: Int, val skipped: Int)
+/**
+ * Outcome of adding a batch of images: images that couldn't be decoded are [skipped]. [imageIds] are the
+ * added images' ids in the order they were given, when the operation reports them.
+ */
+data class ImportResult(val added: Int, val skipped: Int, val imageIds: List<Long> = emptyList())
 
 /** A file written for the user to share or save. */
 data class ExportedFile(val path: String, val mimeType: String)

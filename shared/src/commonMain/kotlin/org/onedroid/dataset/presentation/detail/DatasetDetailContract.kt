@@ -81,8 +81,11 @@ data class AutoSortUi(
     val ready: Boolean get() = !preparing && !unavailable
 }
 
-/** A captured or picked image that matched no class; [preview] is a small JPEG of it. */
-class UnknownImage(val id: Long, val preview: ByteArray, val source: ImageSource)
+/**
+ * A captured or picked image that matched no class; [preview] is a small JPEG of it, and [embedding] what
+ * it was matched by, kept so filing it doesn't need it embedded again.
+ */
+class UnknownImage(val id: Long, val preview: ByteArray, val source: ImageSource, val embedding: FloatArray?)
 
 /** [colorIndex] picks the class's accent color; [imageIds] are oldest first. */
 data class ClassUi(

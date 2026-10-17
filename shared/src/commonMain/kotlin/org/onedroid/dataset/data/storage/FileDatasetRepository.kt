@@ -339,6 +339,7 @@ class FileDatasetRepository(
         var added = 0
         var skipped = 0
         var unsaved = false
+        val imageIds = ArrayList<Long>(items.size)
         // Images keep the settings they were prepared with, so a change mid-import marks the rest outdated.
         val (settings, revision) = locked { current(datasetId).let { it.imageSettings to it.settingsRevision } }
         onProgress(0, items.size)
@@ -357,6 +358,7 @@ class FileDatasetRepository(
                         )
                         unsaved = (added + 1) % SAVE_EVERY != 0
                         commit(datasetId, updated, persist = !unsaved)
+                        imageIds += imageRecord.id
                         true
                     }
                     if (committed) added++ else skipped++
@@ -370,7 +372,7 @@ class FileDatasetRepository(
                 }
             }
         }
-        return ImportResult(added, skipped)
+        return ImportResult(added, skipped, imageIds)
     }
 
     private class PreparedImage(val bytes: ByteArray, val extension: String, val thumbnail: ByteArray)

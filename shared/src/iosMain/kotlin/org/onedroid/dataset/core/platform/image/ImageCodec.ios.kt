@@ -4,13 +4,27 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asComposeImageBitmap
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
+import kotlinx.cinterop.value
 import kotlinx.cinterop.useContents
 import kotlinx.cinterop.usePinned
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
 import org.jetbrains.skia.ImageInfo
+import platform.CoreFoundation.CFDataRef
+import platform.CoreFoundation.CFDictionaryCreateMutable
+import platform.CoreFoundation.CFDictionarySetValue
+import platform.CoreFoundation.CFNumberCreate
+import platform.CoreFoundation.CFRelease
+import platform.CoreFoundation.kCFBooleanTrue
+import platform.CoreFoundation.kCFNumberIntType
+import platform.CoreFoundation.kCFTypeDictionaryKeyCallBacks
+import platform.CoreFoundation.kCFTypeDictionaryValueCallBacks
 import platform.CoreGraphics.CGBitmapContextCreate
 import platform.CoreGraphics.CGBitmapContextCreateImage
 import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
@@ -23,7 +37,14 @@ import platform.CoreGraphics.CGContextTranslateCTM
 import platform.CoreGraphics.CGImageAlphaInfo
 import platform.CoreGraphics.CGImageRelease
 import platform.CoreGraphics.CGRectMake
+import platform.Foundation.CFBridgingRetain
 import platform.Foundation.NSData
+import platform.ImageIO.CGImageSourceCreateThumbnailAtIndex
+import platform.ImageIO.CGImageSourceCreateWithData
+import platform.ImageIO.kCGImageSourceCreateThumbnailFromImageAlways
+import platform.ImageIO.kCGImageSourceCreateThumbnailWithTransform
+import platform.ImageIO.kCGImageSourceShouldCacheImmediately
+import platform.ImageIO.kCGImageSourceThumbnailMaxPixelSize
 import platform.Foundation.create
 import platform.UIKit.UIGraphicsPopContext
 import platform.UIKit.UIGraphicsPushContext
@@ -31,29 +52,78 @@ import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
 import platform.UIKit.UIImagePNGRepresentation
 import platform.posix.memcpy
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalForeignApi::class)
 actual fun decodeSquare(bytes: ByteArray, size: Int): RgbImage {
-    val image = uiImage(bytes)
-    // UIImage.size and drawInRect already account for EXIF orientation.
-    val (width, height) = image.size.useContents { width to height }
-    val scale = size / min(width, height)
-    val drawWidth = width * scale
-    val drawHeight = height * scale
-    return render(image, size, size, (size - drawWidth) / 2, (size - drawHeight) / 2, drawWidth, drawHeight)
+    val (fullWidth, fullHeight) = orientedSize(bytes)
+    // Just big enough that the shorter side still covers the square.
+    val longSide = ceil(size * max(fullWidth, fullHeight) / min(fullWidth, fullHeight)).toInt()
+    return withDecoded(bytes, longSide) { image ->
+        val (width, height) = image.size.useContents { width to height }
+        val scale = size / min(width, height)
+        val drawWidth = width * scale
+        val drawHeight = height * scale
+        render(image, size, size, (size - drawWidth) / 2, (size - drawHeight) / 2, drawWidth, drawHeight)
+    }
 }
 
 @OptIn(ExperimentalForeignApi::class)
 actual fun decodeFitted(bytes: ByteArray, maxSide: Int): RgbImage {
-    val image = uiImage(bytes)
-    val (width, height) = image.size.useContents { width to height }
-    val scale = min(1.0, maxSide / max(width, height))
-    val outWidth = (width * scale).roundToInt().coerceAtLeast(1)
-    val outHeight = (height * scale).roundToInt().coerceAtLeast(1)
-    return render(image, outWidth, outHeight, 0.0, 0.0, outWidth.toDouble(), outHeight.toDouble())
+    val (fullWidth, fullHeight) = orientedSize(bytes)
+    val longSide = min(maxSide.toDouble(), max(fullWidth, fullHeight)).roundToInt()
+    return withDecoded(bytes, longSide) { image ->
+        val (width, height) = image.size.useContents { width to height }
+        val scale = min(1.0, maxSide / max(width, height))
+        val outWidth = (width * scale).roundToInt().coerceAtLeast(1)
+        val outHeight = (height * scale).roundToInt().coerceAtLeast(1)
+        render(image, outWidth, outHeight, 0.0, 0.0, outWidth.toDouble(), outHeight.toDouble())
+    }
+}
+
+/** Width and height after EXIF orientation, read from the header without decoding the pixels. */
+@OptIn(ExperimentalForeignApi::class)
+private fun orientedSize(bytes: ByteArray): Pair<Double, Double> =
+    uiImage(bytes).size.useContents { width to height }
+
+/**
+ * Decodes [bytes] with ImageIO at most [longSide] pixels on the longer side, EXIF orientation applied, and
+ * passes it to [block]. Decoding straight to the needed size keeps a 48 MP photo from taking ~200 MB of
+ * memory, as drawing the full-size UIImage would.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private fun <T> withDecoded(bytes: ByteArray, longSide: Int, block: (UIImage) -> T): T {
+    require(bytes.isNotEmpty()) { "Unsupported image format" }
+    val data = bytes.usePinned { NSData.create(bytes = it.addressOf(0), length = bytes.size.toULong()) }
+    @Suppress("UNCHECKED_CAST")
+    val cfData = CFBridgingRetain(data) as CFDataRef
+    val source = CGImageSourceCreateWithData(cfData, null)
+    CFRelease(cfData)
+    requireNotNull(source) { "Unsupported image format" }
+    val options = CFDictionaryCreateMutable(null, 4, kCFTypeDictionaryKeyCallBacks.ptr, kCFTypeDictionaryValueCallBacks.ptr)
+    val maxPixels = memScoped {
+        val value = alloc<IntVar>().apply { this.value = longSide.coerceAtLeast(1) }
+        CFNumberCreate(null, kCFNumberIntType, value.ptr)
+    }
+    try {
+        CFDictionarySetValue(options, kCGImageSourceCreateThumbnailFromImageAlways, kCFBooleanTrue)
+        CFDictionarySetValue(options, kCGImageSourceCreateThumbnailWithTransform, kCFBooleanTrue)
+        CFDictionarySetValue(options, kCGImageSourceShouldCacheImmediately, kCFBooleanTrue)
+        CFDictionarySetValue(options, kCGImageSourceThumbnailMaxPixelSize, maxPixels)
+        val cgImage = requireNotNull(CGImageSourceCreateThumbnailAtIndex(source, 0u, options)) { "Unsupported image format" }
+        try {
+            return block(UIImage.imageWithCGImage(cgImage))
+        } finally {
+            CGImageRelease(cgImage)
+        }
+    } finally {
+        CFRelease(maxPixels)
+        CFRelease(options)
+        CFRelease(source)
+    }
 }
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)

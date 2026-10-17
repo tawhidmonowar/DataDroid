@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.selects.select
 import org.onedroid.dataset.domain.DataError
 import org.onedroid.dataset.domain.Result
@@ -69,7 +71,7 @@ class DatasetDetailViewModel(
     val events = _events.receiveAsFlow()
 
     /** Camera frames waiting to be saved; if saving falls behind, the oldest are dropped. */
-    private val captures = Channel<Pair<Int, ByteArray>>(capacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val captures = Channel<PendingSave>(capacity = 32, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     private var transferJob: Job? = null
 
@@ -84,6 +86,12 @@ class DatasetDetailViewModel(
     private val autoCaptures = Channel<ByteArray>(capacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val previewFrames = Channel<ByteArray>(Channel.CONFLATED)
     private var nextUnknownId = 0L
+
+    /**
+     * Held while auto-sorted images are saved and their embeddings recorded, and while the matcher is refitted,
+     * so a refit never sees a saved image before its embedding and embeds it again from disk.
+     */
+    private val sortLock = Mutex()
 
     init {
         repository.observeDataset(datasetId)
@@ -110,11 +118,7 @@ class DatasetDetailViewModel(
             .onEach { outcome -> outcome.result.onSuccess { reportConversion(it) }.onFailure { showError(it) } }
             .launchIn(viewModelScope)
 
-        viewModelScope.launch {
-            for ((classId, jpeg) in captures) {
-                repository.addImages(datasetId, classId, listOf(ImageSource { jpeg })).onFailure { showError(it) }
-            }
-        }
+        viewModelScope.launch { saveCaptures() }
     }
 
     fun onAction(action: DatasetDetailAction) {
@@ -250,7 +254,7 @@ class DatasetDetailViewModel(
         val save = current.capturing && current.canEdit
         when {
             current.autoSort != null -> if (save) autoCaptures.trySend(jpeg) else previewFrames.trySend(jpeg)
-            save && current.cameraClassId != null -> captures.trySend(current.cameraClassId to jpeg)
+            save && current.cameraClassId != null -> captures.trySend(PendingSave(current.cameraClassId, jpeg))
         }
     }
 
@@ -277,9 +281,13 @@ class DatasetDetailViewModel(
     private suspend fun followDataset() {
         dataset.filterNotNull().conflate().collect { current ->
             val first = matcher == null
-            sorter.matcherFor(current) { done, total ->
-                if (first) updateAutoSort { it.copy(prepared = done, toPrepare = total) }
+            val fitted = sortLock.withLock {
+                // The dataset may have changed while waiting for the lock; fit the latest.
+                sorter.matcherFor(dataset.value ?: current) { done, total ->
+                    if (first) updateAutoSort { it.copy(prepared = done, toPrepare = total) }
+                }
             }
+            fitted
                 .onSuccess { fitted ->
                     matcher = fitted
                     updateAutoSort { it.copy(preparing = false) }
@@ -296,14 +304,53 @@ class DatasetDetailViewModel(
                 autoCaptures.onReceive { it to true }
                 previewFrames.onReceive { it to false }
             }
-            val match = classify(jpeg) ?: continue
-            updateAutoSort { it.copy(prediction = match) }
-            if (save) file(match, preview = jpeg, source = ImageSource { jpeg })
+            val classified = classify(jpeg) ?: continue
+            updateAutoSort { it.copy(prediction = classified.match) }
+            if (!save) continue
+            val classId = classified.match.classId
+            if (classId == null) {
+                holdUnknown(preview = jpeg, source = ImageSource { jpeg }, embedding = classified.embedding)
+            } else {
+                // Saved in the background, so sorting keeps up with the camera.
+                captures.trySend(PendingSave(classId, jpeg, classified.embedding))
+            }
         }
     }
 
+    /**
+     * Saves captured frames. Frames that queued up meanwhile are saved together, one call per class, so the
+     * dataset record is written once per batch rather than once per frame.
+     */
+    private suspend fun saveCaptures() {
+        for (first in captures) {
+            val batch = mutableListOf(first)
+            while (batch.size < MAX_SAVE_BATCH) batch += captures.tryReceive().getOrNull() ?: break
+            for ((classId, frames) in batch.groupBy { it.classId }) {
+                val sources = frames.map { frame -> ImageSource { frame.jpeg } }
+                if (frames.first().embedding == null) {
+                    repository.addImages(datasetId, classId, sources).onFailure { showError(it) }
+                } else {
+                    sortLock.withLock {
+                        repository.addImages(datasetId, classId, sources)
+                            .onSuccess { result ->
+                                rememberEmbeddings(result, frames.map { it.embedding })
+                                if (result.added > 0) countSorted(classId, result.added)
+                            }
+                            .onFailure { showError(it) }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Hands [embeddings] (in the order the images were added) to the sorter, if every image was added. */
+    private suspend fun rememberEmbeddings(result: ImportResult, embeddings: List<FloatArray?>) {
+        if (result.skipped > 0 || result.imageIds.size != embeddings.size) return
+        sorter.remember(datasetId, result.imageIds.zip(embeddings).mapNotNull { (id, e) -> e?.let { id to it } }.toMap())
+    }
+
     /** Where [image] belongs, or null if sorting isn't ready or it isn't a decodable image. */
-    private suspend fun classify(image: ByteArray): ClassMatch? {
+    private suspend fun classify(image: ByteArray): Classified? {
         val fitted = matcher ?: return null
         val strictness = _state.value.autoSort?.strictness ?: return null
         return when (val embedded = sorter.embed(image)) {
@@ -311,23 +358,16 @@ class DatasetDetailViewModel(
                 updateAutoSort { it.copy(unavailable = true) }
                 null
             }
-            is Result.Success -> embedded.data?.let { fitted.match(it, strictness) }
+            is Result.Success -> embedded.data?.let { Classified(fitted.match(it, strictness), it) }
         }
     }
 
-    /** Saves a sorted image to its class, or holds it with the unknowns for the user to decide. */
-    private suspend fun file(match: ClassMatch, preview: ByteArray, source: ImageSource) {
-        val classId = match.classId
-        if (classId == null) {
-            updateAutoSort { autoSort ->
-                val unknown = UnknownImage(nextUnknownId++, preview, source)
-                autoSort.copy(unknowns = (autoSort.unknowns + unknown).takeLast(MAX_UNKNOWNS))
-            }
-            return
+    /** Holds an image that matched no class with the unknowns, for the user to decide. */
+    private fun holdUnknown(preview: ByteArray, source: ImageSource, embedding: FloatArray?) {
+        updateAutoSort { autoSort ->
+            val unknown = UnknownImage(nextUnknownId++, preview, source, embedding)
+            autoSort.copy(unknowns = (autoSort.unknowns + unknown).takeLast(MAX_UNKNOWNS))
         }
-        repository.addImages(datasetId, classId, listOf(source))
-            .onSuccess { result -> if (result.added > 0) countSorted(classId, result.added) }
-            .onFailure { showError(it) }
     }
 
     private fun countSorted(classId: Int, count: Int) =
@@ -338,7 +378,7 @@ class DatasetDetailViewModel(
         val fitted = matcher
         if (fitted == null || _state.value.autoSort?.ready != true) return
         runTransfer(TransferKind.SORT) {
-            val byClass = mutableMapOf<Int, MutableList<ImageSource>>()
+            val byClass = mutableMapOf<Int, MutableList<Pair<ImageSource, FloatArray>>>()
             var unmatched = 0
             var skipped = 0
             onProgress(0, images.size)
@@ -350,30 +390,33 @@ class DatasetDetailViewModel(
                 } catch (e: Exception) {
                     null
                 }
-                val match = bytes?.let { classify(it) }
-                val classId = match?.classId
+                val classified = bytes?.let { classify(it) }
+                val classId = classified?.match?.classId
                 when {
-                    match == null -> skipped++
-                    classId != null -> byClass.getOrPut(classId) { mutableListOf() } += source
+                    classified == null -> skipped++
+                    classId != null -> byClass.getOrPut(classId) { mutableListOf() } += source to classified.embedding
                     else -> {
                         val preview = sorter.preview(bytes)
                         if (preview == null) skipped++ else {
                             unmatched++
-                            file(match, preview, source)
+                            holdUnknown(preview, source, classified.embedding)
                         }
                     }
                 }
                 onProgress(index + 1, images.size)
             }
             var sorted = 0
-            for ((classId, sources) in byClass) {
-                repository.addImages(datasetId, classId, sources)
-                    .onSuccess { result ->
-                        sorted += result.added
-                        skipped += result.skipped
-                        countSorted(classId, result.added)
-                    }
-                    .onFailure { showError(it) }
+            for ((classId, images) in byClass) {
+                sortLock.withLock {
+                    repository.addImages(datasetId, classId, images.map { it.first })
+                        .onSuccess { result ->
+                            rememberEmbeddings(result, images.map { it.second })
+                            sorted += result.added
+                            skipped += result.skipped
+                            countSorted(classId, result.added)
+                        }
+                        .onFailure { showError(it) }
+                }
             }
             if (sorted > 0) _events.send(DatasetDetailEvent.ShowMessage(UiText.Plural(Res.plurals.message_images_sorted, sorted, sorted)))
             if (unmatched > 0) _events.send(DatasetDetailEvent.ShowMessage(UiText.Plural(Res.plurals.message_images_unmatched, unmatched, unmatched)))
@@ -400,7 +443,8 @@ class DatasetDetailViewModel(
         val chosen = _state.value.autoSort?.unknowns.orEmpty().filter { imageIds == null || it.id in imageIds }
         if (chosen.isEmpty()) return
         runImport { onProgress ->
-            save(onProgress, chosen.map { it.source }).onSuccess {
+            sortLock.withLock { save(onProgress, chosen.map { it.source }) }.onSuccess { result ->
+                rememberEmbeddings(result, chosen.map { it.embedding })
                 val filed = chosen.map { it.id }.toSet()
                 updateAutoSort { autoSort -> autoSort.copy(unknowns = autoSort.unknowns.filterNot { it.id in filed }) }
             }
@@ -506,7 +550,16 @@ class DatasetDetailViewModel(
         /** Archives are read into memory, so keep well below a typical heap. */
         const val MAX_ARCHIVE_BYTES = 256L shl 20
 
+        /** Most captured frames saved in one call; matches the repository's record-write interval. */
+        const val MAX_SAVE_BATCH = 25
+
         /** Unknown images held in memory at once; older ones make way for new. */
         const val MAX_UNKNOWNS = 100
     }
 }
+
+/** A captured frame waiting to be saved to [classId]; [embedding] is set when auto-sort put it there. */
+private class PendingSave(val classId: Int, val jpeg: ByteArray, val embedding: FloatArray? = null)
+
+/** An image's best match and the embedding it was matched by. */
+private class Classified(val match: ClassMatch, val embedding: FloatArray)

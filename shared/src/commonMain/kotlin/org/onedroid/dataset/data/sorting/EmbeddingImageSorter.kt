@@ -78,7 +78,7 @@ class EmbeddingImageSorter(
                 val embedded = coroutineScope {
                     chunk.map { imageId -> async { imageId to embedStored(extractor, dataset.id, imageId) } }.awaitAll()
                 }
-                withContext(NonCancellable) { mutex.withLock { remember(dataset.id, embedded) } }
+                withContext(NonCancellable) { mutex.withLock { store(dataset.id, embedded) } }
                 done += chunk.size
                 onProgress(done, missing.size)
             }
@@ -93,6 +93,16 @@ class EmbeddingImageSorter(
     override suspend fun embed(image: ByteArray): Result<FloatArray?, DataError.Sorting> {
         val extractor = extractor() ?: return Result.Error(DataError.Sorting.MODEL_UNAVAILABLE)
         return Result.Success(embedBytes(extractor, image))
+    }
+
+    override suspend fun remember(datasetId: String, embeddings: Map<Long, FloatArray>) {
+        if (embeddings.isEmpty()) return
+        withContext(NonCancellable) {
+            mutex.withLock {
+                load(datasetId)
+                store(datasetId, embeddings.map { (id, embedding) -> id to embedding })
+            }
+        }
     }
 
     override suspend fun preview(image: ByteArray): ByteArray? = withContext(Dispatchers.Default) {
@@ -114,7 +124,7 @@ class EmbeddingImageSorter(
     }
 
     /** Adds freshly embedded images to the cache and appends them to the file. Call while locked. */
-    private suspend fun remember(datasetId: String, embedded: List<Pair<Long, FloatArray?>>) {
+    private suspend fun store(datasetId: String, embedded: List<Pair<Long, FloatArray?>>) {
         if (cachedDatasetId != datasetId) return
         val fresh = embedded.mapNotNull { (id, embedding) ->
             if (embedding == null) unreadable += id
@@ -135,11 +145,16 @@ class EmbeddingImageSorter(
         }
     }
 
-    /** Rewrites the file without deleted images once they make up most of it. Call while locked. */
+    /**
+     * Forgets images deleted from the dataset, and rewrites the file without them once they make up most of
+     * it. Image ids only grow, so ids newer than [imageIds]' newest were added after that snapshot (and
+     * [remember]ed meanwhile), not deleted. Call while locked.
+     */
     private suspend fun compactIfStale(datasetId: String, imageIds: Set<Long>) {
         if (cachedDatasetId != datasetId) return
-        cache.keys.retainAll(imageIds)
-        unreadable.retainAll(imageIds)
+        val newest = imageIds.maxOrNull() ?: Long.MIN_VALUE
+        cache.keys.removeAll { it <= newest && it !in imageIds }
+        unreadable.removeAll { it <= newest && it !in imageIds }
         if (fileRecords <= cache.size * 2 + COMPACT_SLACK) return
         persist { rewrite(datasetId) }
     }

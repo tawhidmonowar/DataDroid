@@ -21,6 +21,12 @@ interface ImageSorter {
     /** The embedding [ClassMatcher] compares, for encoded image bytes; null if they aren't a decodable image. */
     suspend fun embed(image: ByteArray): Result<FloatArray?, DataError.Sorting>
 
+    /**
+     * Records embeddings already computed (by [embed]) for images just saved to [datasetId], by image id, so
+     * [matcherFor] needn't read and embed them again.
+     */
+    suspend fun remember(datasetId: String, embeddings: Map<Long, FloatArray>)
+
     /** A small square JPEG to show an image that isn't saved yet; null if it can't be decoded. */
     suspend fun preview(image: ByteArray): ByteArray?
 }

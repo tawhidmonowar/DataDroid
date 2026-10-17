@@ -58,7 +58,8 @@ class ImageLoader(private val repository: DatasetRepository) {
     private companion object {
         const val THUMBNAIL_SIZE = 192
         const val FULL_IMAGE_SIZE = 1280
-        const val MAX_CACHED_THUMBNAILS = 400
+        /** About 22 MB of 192 px bitmaps: several screens of gallery to scroll back through. */
+        const val MAX_CACHED_THUMBNAILS = 150
     }
 }
 
