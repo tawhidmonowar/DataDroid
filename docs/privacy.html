@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataDroid Privacy Policy</title>
+  <meta name="description" content="DataDroid keeps your images on your device. No accounts, no analytics, no uploads.">
+  <meta name="theme-color" content="#1967d2">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    document.documentElement.classList.add("js");
+    try {
+      const theme = localStorage.getItem("theme");
+      if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+    } catch (e) { /* Storage blocked: follow the system theme. */ }
+  </script>
+  <script src="js/main.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="./" aria-label="DataDroid home">
+        <img src="assets/icon-512.png" alt="" width="36" height="36">
+        <span>DataDroid</span>
+      </a>
+      <button class="icon-btn theme-toggle" type="button" aria-label="Switch to dark theme">
+        <svg class="icon-sun" aria-hidden="true"><use href="assets/icons.svg#sun"></use></svg>
+        <svg class="icon-moon" aria-hidden="true"><use href="assets/icons.svg#moon"></use></svg>
+      </button>
+      <a class="icon-btn" href="https://github.com/tawhidmonowar/DataDroid" aria-label="Source code on GitHub">
+        <svg aria-hidden="true"><use href="assets/icons.svg#code"></use></svg>
+      </a>
+    </div>
+  </header>
+
+  <main id="main" class="container article">
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: October 18, 2026</p>
+
+    <p>
+      DataDroid is an on-device app for building image datasets. It is designed so your images never leave your
+      device unless you choose to share them.
+    </p>
+
+    <h2>What DataDroid stores</h2>
+    <p>
+      Datasets, class names, images, thumbnails, image embeddings used by auto-sort, and your settings are saved
+      in the app's private storage on your device. Deleting a dataset, or uninstalling the app, removes them.
+    </p>
+
+    <h2>What DataDroid sends</h2>
+    <p>
+      Nothing. DataDroid has no accounts, analytics, advertising or tracking, and it does not upload your images or
+      any other data. The auto-sort model is bundled with the app and runs entirely on your device.
+    </p>
+
+    <h2>Permissions</h2>
+    <ul>
+      <li><strong>Camera</strong>: used only to capture images for your datasets, and only while the camera view is open.</li>
+      <li><strong>Photos and files</strong>: DataDroid uses the system pickers, so it can read only the photos, folders or zip files you choose.</li>
+    </ul>
+
+    <h2>Sharing</h2>
+    <p>
+      When you export a dataset, DataDroid creates a zip and opens the system share sheet. Where the zip goes from
+      there is up to you and the app you choose.
+    </p>
+
+    <h2>Children</h2>
+    <p>DataDroid does not knowingly collect any personal information from anyone, including children.</p>
+
+    <h2>Changes and contact</h2>
+    <p>
+      If this policy changes, the new version will be posted on this page with a new date. Questions are welcome at
+      <a href="mailto:tawhidmonowar@duck.com">tawhidmonowar@duck.com</a> or through
+      <a href="https://github.com/tawhidmonowar/DataDroid/issues">GitHub issues</a>.
+    </p>
+
+    <p><a href="./">← Back to DataDroid</a></p>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>© <span data-year>2026</span> Tawhid Monowar · Licensed under Apache 2.0</p>
+      <ul class="footer-links">
+        <li><a href="./">Home</a></li>
+        <li><a href="https://github.com/tawhidmonowar/DataDroid">GitHub</a></li>
+      </ul>
+    </div>
+  </footer>
+</body>
+</html>
