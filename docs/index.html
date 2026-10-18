@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataDroid: On-device image dataset studio</title>
+  <meta name="description" content="Build image classification datasets on Android and iOS. Capture, auto-sort, balance and export ready-to-train zips, all on your device. Built with Kotlin Multiplatform.">
+  <meta name="theme-color" content="#1967d2">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="DataDroid: On-device image dataset studio">
+  <meta property="og:description" content="Capture, auto-sort, balance and export image datasets on Android and iOS. Built with Kotlin Multiplatform.">
+  <meta property="og:image" content="https://tawhidmonowar.github.io/DataDroid/assets/icon-512.png">
+  <meta name="twitter:card" content="summary">
+
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/style.css">
+
+  <script>
+    // Apply the saved theme before the page paints, so there is no flash.
+    document.documentElement.classList.add("js");
+    try {
+      const theme = localStorage.getItem("theme");
+      if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+    } catch (e) { /* Storage blocked: follow the system theme. */ }
+  </script>
+  <script src="js/main.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="DataDroid home">
+        <img src="assets/icon-512.png" alt="" width="36" height="36">
+        <span>DataDroid</span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="#features">Features</a>
+        <a href="#auto-sort">Auto-sort</a>
+        <a href="#screenshots">Screenshots</a>
+        <a href="#multiplatform">Multiplatform</a>
+        <a href="#get-started">Get started</a>
+      </nav>
+      <button class="icon-btn theme-toggle" type="button" aria-label="Switch to dark theme">
+        <svg class="icon-sun" aria-hidden="true"><use href="assets/icons.svg#sun"></use></svg>
+        <svg class="icon-moon" aria-hidden="true"><use href="assets/icons.svg#moon"></use></svg>
+      </button>
+      <a class="icon-btn" href="https://github.com/tawhidmonowar/DataDroid" aria-label="Source code on GitHub">
+        <svg aria-hidden="true"><use href="assets/icons.svg#code"></use></svg>
+      </a>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero" id="top">
+      <div class="container hero-grid">
+        <div>
+          <span class="eyebrow">Kotlin Multiplatform · Android &amp; iOS</span>
+          <h1>Build image datasets <span class="highlight">on your phone</span></h1>
+          <p class="lead">
+            DataDroid turns your phone into an image dataset studio. Capture or import images, let an on-device
+            model sort them into classes, check the balance, and export a ready-to-train zip.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#get-started">
+              Get started
+              <svg aria-hidden="true"><use href="assets/icons.svg#arrow"></use></svg>
+            </a>
+            <a class="btn btn-outline" href="https://github.com/tawhidmonowar/DataDroid">
+              <svg aria-hidden="true"><use href="assets/icons.svg#code"></use></svg>
+              View on GitHub
+            </a>
+          </div>
+          <ul class="badges" aria-label="Highlights">
+            <li><svg aria-hidden="true"><use href="assets/icons.svg#lock"></use></svg>Runs fully offline</li>
+            <li><svg aria-hidden="true"><use href="assets/icons.svg#android"></use></svg>Android 7.0+</li>
+            <li><svg aria-hidden="true"><use href="assets/icons.svg#iphone"></use></svg>iOS 18.2+</li>
+            <li><svg aria-hidden="true"><use href="assets/icons.svg#code"></use></svg>Open source</li>
+          </ul>
+        </div>
+
+        <div class="hero-visual">
+          <div class="phone">
+            <div class="screen">
+              <img src="screenshots/datasets.png" alt="DataDroid home screen listing image datasets" width="1080" height="2340">
+              <div class="placeholder" aria-hidden="true">
+                <img src="assets/icon-512.png" alt="" width="56" height="56">
+                <span>Your datasets</span>
+              </div>
+            </div>
+          </div>
+          <div class="phone">
+            <div class="screen">
+              <img src="screenshots/auto-sort.png" alt="Auto-sort camera showing the closest class for the current frame" width="1080" height="2340">
+              <div class="placeholder" aria-hidden="true">
+                <img src="assets/icon-512.png" alt="" width="56" height="56">
+                <span>Auto-sort</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="section section-alt" id="features">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">Features</span>
+          <h2>From first photo to training data</h2>
+          <p>Everything you need to collect a clean image classification dataset, without a laptop or a cloud account.</p>
+        </div>
+
+        <div class="card-grid">
+          <article class="card reveal">
+            <div class="card-icon"><svg aria-hidden="true"><use href="assets/icons.svg#camera"></use></svg></div>
+            <h3>Capture fast</h3>
+            <p>Tap for one image, or hold the shutter to record about five frames a second. Pick from the photo library too.</p>
+          </article>
+          <article class="card reveal">
+            <div class="card-icon"><svg aria-hidden="true"><use href="assets/icons.svg#sparkle"></use></svg></div>
+            <h3>Auto-sort with on-device AI</h3>
+            <p>Shoot without choosing a class. A MobileNetV3 model saves each image to the class it looks most like.</p>
+          </article>
+          <article class="card reveal">
+            <div class="card-icon"><svg aria-hidden="true"><use href="assets/icons.svg#chart"></use></svg></div>
+            <h3>Class balance</h3>
+            <p>See counts per class and get warned about empty, small or imbalanced classes before you train.</p>
+          </article>
+          <article class="card reveal">
+            <div class="card-icon"><svg aria-hidden="true"><use href="assets/icons.svg#folder"></use></svg></div>
+            <h3>Import anything</h3>
+            <p>Add a folder to a class, or import a folder or zip of class folders. Nested splits like train/val are detected.</p>
+          </article>
+          <article class="card reveal">
+            <div class="card-icon"><svg aria-hidden="true"><use href="assets/icons.svg#collections"></use></svg></div>
+            <h3>Review and fix</h3>
+            <p>Browse each class, view images full screen, and multi-select to move or delete mislabelled shots.</p>
+          </article>
+          <article class="card reveal">
+            <div class="card-icon"><svg aria-hidden="true"><use href="assets/icons.svg#tune"></use></svg></div>
+            <h3>Image settings</h3>
+            <p>Keep originals, or resize to fit or square and convert to JPEG, PNG or WebP, per app or per dataset.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Auto-sort -->
+    <section class="section" id="auto-sort">
+      <div class="container split">
+        <div class="reveal">
+          <span class="eyebrow">Auto-sort</span>
+          <h2>Point, shoot, and it lands in the right class</h2>
+          <p class="lead">
+            DataDroid learns your classes from the images you already have, then sorts new ones as you capture.
+            No training step, no upload.
+          </p>
+          <ol class="steps">
+            <li>
+              <h3>Embed</h3>
+              <p>An on-device MobileNetV3-Small model turns each image into a 1,024-number embedding. Embeddings are cached, so each image is analysed once.</p>
+            </li>
+            <li>
+              <h3>Match</h3>
+              <p>Each new image is compared with every class and saved to the most similar one.</p>
+            </li>
+            <li>
+              <h3>Catch the unknown</h3>
+              <p>Images unlike every class wait under <strong>Unknown</strong>, where one tap starts a new class with them.</p>
+            </li>
+          </ol>
+        </div>
+
+        <div class="sort-demo reveal" role="img" aria-label="Example: a photo of a mug is 92% similar to the mug class, 41% to pen and 28% to keys, so it is saved to mug.">
+          <p class="sort-demo-label">Live match</p>
+          <div class="match">
+            <span class="match-name">mug</span>
+            <span class="bar"><span style="width: 92%"></span></span>
+            <span class="match-value">92%</span>
+          </div>
+          <div class="match muted">
+            <span class="match-name">pen</span>
+            <span class="bar"><span style="width: 41%"></span></span>
+            <span class="match-value">41%</span>
+          </div>
+          <div class="match muted">
+            <span class="match-name">keys</span>
+            <span class="bar"><span style="width: 28%"></span></span>
+            <span class="match-value">28%</span>
+          </div>
+          <p class="sort-demo-note">
+            "Unknown detection" sets how alike an image must be to join a class. Set it to 0 to always use the closest class.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screenshots -->
+    <section class="section section-alt" id="screenshots">
+      <div class="container">
+        <div class="section-head center reveal">
+          <span class="eyebrow">Screenshots</span>
+          <h2>One app, the same on Android and iOS</h2>
+          <p>The whole interface is shared Compose Multiplatform code.</p>
+        </div>
+
+        <div class="gallery" tabindex="0" aria-label="Screenshots, scrollable">
+          <figure>
+            <div class="phone small">
+              <div class="screen">
+                <img src="screenshots/datasets.png" alt="Dataset list" loading="lazy" width="1080" height="2340">
+                <div class="placeholder" aria-hidden="true"><img src="assets/icon-512.png" alt="" width="56" height="56"><span>Screenshot coming soon</span></div>
+              </div>
+            </div>
+            <figcaption>Your datasets</figcaption>
+          </figure>
+          <figure>
+            <div class="phone small">
+              <div class="screen">
+                <img src="screenshots/dataset.png" alt="Dataset with classes and image samples" loading="lazy" width="1080" height="2340">
+                <div class="placeholder" aria-hidden="true"><img src="assets/icon-512.png" alt="" width="56" height="56"><span>Screenshot coming soon</span></div>
+              </div>
+            </div>
+            <figcaption>Classes and samples</figcaption>
+          </figure>
+          <figure>
+            <div class="phone small">
+              <div class="screen">
+                <img src="screenshots/auto-sort.png" alt="Auto-sort camera" loading="lazy" width="1080" height="2340">
+                <div class="placeholder" aria-hidden="true"><img src="assets/icon-512.png" alt="" width="56" height="56"><span>Screenshot coming soon</span></div>
+              </div>
+            </div>
+            <figcaption>Auto-sort</figcaption>
+          </figure>
+          <figure>
+            <div class="phone small">
+              <div class="screen">
+                <img src="screenshots/balance.png" alt="Class balance with per-class bars and warnings" loading="lazy" width="1080" height="2340">
+                <div class="placeholder" aria-hidden="true"><img src="assets/icon-512.png" alt="" width="56" height="56"><span>Screenshot coming soon</span></div>
+              </div>
+            </div>
+            <figcaption>Class balance</figcaption>
+          </figure>
+          <figure>
+            <div class="phone small">
+              <div class="screen">
+                <img src="screenshots/settings.png" alt="Image settings for size and format" loading="lazy" width="1080" height="2340">
+                <div class="placeholder" aria-hidden="true"><img src="assets/icon-512.png" alt="" width="56" height="56"><span>Screenshot coming soon</span></div>
+              </div>
+            </div>
+            <figcaption>Image settings</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- Export -->
+    <section class="section" id="export">
+      <div class="container export-grid">
+        <div class="reveal">
+          <span class="eyebrow">Export</span>
+          <h2>A zip your training code already understands</h2>
+          <p class="lead">One folder per class plus a small <code>metadata.json</code>, shared through the system share sheet.</p>
+          <ul class="checklist">
+            <li>Works with folder-based loaders such as PyTorch <code>ImageFolder</code> and Keras <code>image_dataset_from_directory</code></li>
+            <li>Empty classes are left out</li>
+            <li>Import the same zip back as a new dataset on either platform</li>
+          </ul>
+        </div>
+        <pre class="tree reveal" aria-label="Export folder layout"><code><span class="folder">Animal_Dataset/</span>
+├── metadata.json
+├── <span class="folder">cat/</span>
+│   ├── cat_0001.jpg
+│   └── <span class="dim">…</span>
+├── <span class="folder">dog/</span>
+│   └── dog_0001.png
+└── <span class="folder">bird/</span>
+    └── bird_0001.jpg</code></pre>
+      </div>
+    </section>
+
+    <!-- Multiplatform -->
+    <section class="section section-alt" id="multiplatform">
+      <div class="container">
+        <div class="section-head reveal">
+          <span class="eyebrow">Built with Kotlin Multiplatform</span>
+          <h2>About 85% shared Kotlin</h2>
+          <p>
+            UI, view models, storage, zip handling and the sorting logic are written once in <code>commonMain</code>.
+            Only the camera, image codecs, pickers, the share sheet and the model runtime are platform code.
+          </p>
+        </div>
+
+        <div class="reveal">
+          <div class="share-bar" role="img" aria-label="Kotlin code by source set: about 85% common, 6% Android, 9% iOS">
+            <span class="common">85% common</span>
+            <span class="android"></span>
+            <span class="ios"></span>
+          </div>
+          <ul class="legend">
+            <li><i></i>commonMain · ~7,200 lines</li>
+            <li><i class="android"></i>androidMain · ~490 lines</li>
+            <li><i class="ios"></i>iosMain · ~760 lines</li>
+          </ul>
+        </div>
+
+        <ul class="tech-list">
+          <li class="reveal"><strong>Compose Multiplatform</strong><span>Shared Material 3 UI and type-safe navigation</span></li>
+          <li class="reveal"><strong>MVI view models</strong><span>State, actions and events with Lifecycle ViewModel</span></li>
+          <li class="reveal"><strong>Koin</strong><span>Dependency injection across both platforms</span></li>
+          <li class="reveal"><strong>kotlinx-io &amp; serialization</strong><span>File storage and a streaming zip reader and writer</span></li>
+          <li class="reveal"><strong>LiteRT &amp; TensorFlow Lite C</strong><span>Model runtime on Android, and on iOS through cinterop</span></li>
+          <li class="reveal"><strong>CameraX &amp; AVFoundation</strong><span>Native cameras behind one <code>expect</code>/<code>actual</code> API</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Get started -->
+    <section class="section" id="get-started">
+      <div class="container">
+        <div class="section-head center reveal">
+          <span class="eyebrow">Get started</span>
+          <h2>Run it yourself</h2>
+          <p>Clone the repository, then build for the platform you want. The README has the full requirements.</p>
+        </div>
+
+        <div class="platform-grid">
+          <article class="card reveal">
+            <h3><svg aria-hidden="true"><use href="assets/icons.svg#android"></use></svg>Android</h3>
+            <ol>
+              <li>Open the project in Android Studio, or use the command line.</li>
+              <li>Connect a device or start an emulator (Android 7.0+).</li>
+              <li>Install the debug build:</li>
+            </ol>
+            <pre><code>git clone https://github.com/tawhidmonowar/DataDroid.git</code></pre>
+            <pre><code>cd DataDroid && ./gradlew :androidApp:installDebug</code></pre>
+          </article>
+          <article class="card reveal">
+            <h3><svg aria-hidden="true"><use href="assets/icons.svg#iphone"></use></svg>iOS</h3>
+            <ol>
+              <li>Open <code>iosApp/iosApp.xcodeproj</code> in Xcode on a Mac.</li>
+              <li>Pick the <code>iosApp</code> scheme and an iOS 18.2+ simulator.</li>
+              <li>Press Run. The first build compiles the shared Kotlin code and downloads TensorFlow Lite.</li>
+            </ol>
+            <p class="note">
+              For a real device, which you need for the camera, set <code>TEAM_ID</code> in
+              <code>iosApp/Configuration/Config.xcconfig</code>.
+            </p>
+          </article>
+        </div>
+
+        <div class="center-actions reveal">
+          <a class="btn btn-primary" href="https://github.com/tawhidmonowar/DataDroid#readme">
+            Read the full guide
+            <svg aria-hidden="true"><use href="assets/icons.svg#arrow"></use></svg>
+          </a>
+          <a class="btn btn-outline" href="https://github.com/tawhidmonowar/DataDroid">
+            <svg aria-hidden="true"><use href="assets/icons.svg#code"></use></svg>
+            Source code
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>© <span data-year>2026</span> Tawhid Monowar · Licensed under Apache 2.0</p>
+      <ul class="footer-links">
+        <li><a href="privacy.html">Privacy</a></li>
+        <li><a href="https://github.com/tawhidmonowar/DataDroid">GitHub</a></li>
+        <li><a href="https://www.linkedin.com/in/tawhidmonowar">LinkedIn</a></li>
+        <li><a href="https://tawhidmonowar.github.io/profile">Portfolio</a></li>
+      </ul>
+    </div>
+  </footer>
+</body>
+</html>
