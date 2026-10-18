@@ -1,0 +1,41 @@
+DataDroid
+Copyright 2026 Tawhid Monowar
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+-------------------------------------------------------------------------------
+Third-party components
+-------------------------------------------------------------------------------
+
+MobileNetV3-Small image embedder
+  File:    shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite
+  Source:  Google MediaPipe Image Embedder
+           https://ai.google.dev/edge/mediapipe/solutions/vision/image_embedder
+           https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_small/float32/latest/mobilenet_v3_small.tflite
+  SHA-256: bbbb4c51a55a53905af1daec995ca1aae355046f8839bb8c9f5ce9271394bc40
+  License: Apache License 2.0 (stated in the model's embedded metadata)
+  Redistributed unmodified.
+
+TensorFlow Lite C runtime 2.17.0 (iOS)
+  Source:  https://www.tensorflow.org/lite (Google)
+  License: Apache License 2.0
+  Not stored in this repository. Downloaded by the Gradle task
+  :shared:downloadTfliteC into third_party/ and linked into the iOS app.
+
+LiteRT (Android)
+  Source:  https://ai.google.dev/edge/litert (Google)
+  License: Apache License 2.0
+
+Material Design icons
+  Vector paths copied into
+  shared/src/commonMain/kotlin/org/onedroid/dataset/presentation/components/AppIcons.kt
+  Source:  https://github.com/google/material-design-icons (Google)
+  License: Apache License 2.0
+
+Libraries resolved by Gradle, all under the Apache License 2.0:
+  - Kotlin standard library, kotlinx.coroutines, kotlinx.serialization,
+    kotlinx-io (JetBrains)
+  - Compose Multiplatform, JetBrains Lifecycle and Navigation (JetBrains)
+  - AndroidX Core, Activity, AppCompat, CameraX, ExifInterface,
+    SplashScreen (Google)
+  - Koin (Kotzilla / InsertKoin)

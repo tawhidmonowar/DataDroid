@@ -31,3 +31,8 @@ google-services.json
 
 # Android Profiling
 *.hprof
+/.kotlin
+.DS_Store
+
+# Downloaded native dependencies (see shared/build.gradle.kts)
+third_party/

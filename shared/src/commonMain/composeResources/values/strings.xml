@@ -1,0 +1,265 @@
+<resources>
+    <string name="app_name">DataDroid</string>
+
+    <!-- Common actions -->
+    <string name="action_back">Back</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_close">Close</string>
+    <string name="action_create">Create</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_export">Export</string>
+    <string name="action_import_dataset">Import dataset (.zip)</string>
+    <string name="action_more_options">More options</string>
+    <string name="action_move_to">Move to…</string>
+    <string name="action_options_for">Options for %1$s</string>
+    <string name="action_remove">Remove</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_rename_item">Rename %1$s</string>
+    <string name="action_save_name">Save name</string>
+    <string name="action_select_all">Select all</string>
+    <string name="label_name">Name</string>
+    <string name="view_image">View image</string>
+
+    <!-- Counts -->
+    <plurals name="classes_count">
+        <item quantity="one">%1$d class</item>
+        <item quantity="other">%1$d classes</item>
+    </plurals>
+    <plurals name="images_count">
+        <item quantity="one">%1$d image</item>
+        <item quantity="other">%1$d images</item>
+    </plurals>
+
+    <!-- Dataset list -->
+    <string name="datasets_heading">Your image datasets</string>
+    <string name="datasets_empty_title">Build image datasets on your device</string>
+    <string name="datasets_empty_body">Create a dataset, add a class for each label, then capture or import images. Export it as a ready-to-train zip.</string>
+    <string name="datasets_empty_import">Import a dataset</string>
+    <string name="dataset_new">New dataset</string>
+    <string name="dataset_new_empty">New image dataset</string>
+    <string name="dataset_rename">Rename dataset</string>
+    <string name="dataset_delete_title">Delete “%1$s”?</string>
+    <string name="dataset_delete_message">Its %1$s and %2$s will be permanently deleted.</string>
+    <string name="message_dataset_imported">Dataset imported</string>
+
+    <!-- Dataset detail -->
+    <string name="dataset_loading">Loading dataset…</string>
+    <string name="dataset_import_folder">Import class folders</string>
+    <string name="dataset_import_zip">Import class folders from zip</string>
+    <string name="class_add">Add a class</string>
+    <string name="class_default_name">Class %1$d</string>
+    <string name="class_add_images">Add Image Samples:</string>
+    <plurals name="class_image_count">
+        <item quantity="one">%1$d Image Sample</item>
+        <item quantity="other">%1$d Image Samples</item>
+    </plurals>
+    <string name="class_capture_hint">Tap the button below for one image, or hold it to record</string>
+    <string name="class_name_label">Class name</string>
+    <string name="class_view_all">View all images</string>
+    <string name="class_folder">Folder</string>
+    <string name="class_remove_all">Remove all images</string>
+    <string name="class_delete">Delete class</string>
+    <string name="class_delete_title">Delete “%1$s”?</string>
+    <string name="class_delete_message">The class and its %1$s will be permanently deleted.</string>
+    <string name="class_clear_title">Remove all images from “%1$s”?</string>
+    <string name="class_clear_message">Its %1$s will be permanently deleted. The class stays.</string>
+    <string name="source_camera">Camera</string>
+    <string name="source_upload">Upload</string>
+    <plurals name="message_images_added">
+        <item quantity="one">Added %1$d image</item>
+        <item quantity="other">Added %1$d images</item>
+    </plurals>
+    <plurals name="message_images_skipped">
+        <item quantity="one">%1$d file wasn’t a readable image and was skipped</item>
+        <item quantity="other">%1$d files weren’t readable images and were skipped</item>
+    </plurals>
+
+    <plurals name="message_images_sorted">
+        <item quantity="one">Sorted %1$d image into its class</item>
+        <item quantity="other">Sorted %1$d images into their classes</item>
+    </plurals>
+    <plurals name="message_images_unmatched">
+        <item quantity="one">%1$d image didn’t match any class</item>
+        <item quantity="other">%1$d images didn’t match any class</item>
+    </plurals>
+
+    <!-- Auto-sort -->
+    <string name="auto_sort_title">Auto-sort</string>
+    <string name="auto_sort_body">Capture without choosing a class. Each image is saved to the class it looks like.</string>
+    <string name="auto_sort_start">Start</string>
+    <string name="auto_sort_photos">Sort photos from library</string>
+    <string name="auto_sort_preparing">Getting ready…</string>
+    <string name="auto_sort_preparing_count">Learning your classes: %1$d of %2$d images</string>
+    <string name="auto_sort_point">Point the camera at something to see which class it goes to.</string>
+    <string name="auto_sort_no_classes">No class has images yet. Capture something: it waits under Unknown so you can start a class with it.</string>
+    <string name="auto_sort_similar">%1$s similar</string>
+    <string name="auto_sort_closest">Closest: %1$s, %2$s similar</string>
+    <string name="auto_sort_saved">Saved since you opened the camera</string>
+    <string name="auto_sort_strictness">Unknown detection</string>
+    <string name="auto_sort_strictness_off">Off</string>
+    <string name="auto_sort_strictness_hint">Higher is stricter: images must look more like a class to go to it, others wait under Unknown.</string>
+    <string name="auto_sort_strictness_off_hint">Every image goes to its closest class.</string>
+    <string name="unknown_label">Unknown</string>
+    <plurals name="unknown_title">
+        <item quantity="one">%1$d unknown image</item>
+        <item quantity="other">%1$d unknown images</item>
+    </plurals>
+    <string name="unknown_body">These don’t match any class. Start a new class with them, or add them to an existing one.</string>
+    <string name="unknown_new_class">New class</string>
+    <string name="unknown_new_class_title">New class for unknown images</string>
+    <string name="unknown_add_to">Add to…</string>
+    <string name="unknown_discard">Discard</string>
+    <string name="unknown_remove">Remove image</string>
+
+    <!-- Image viewer and gallery -->
+    <string name="image_delete">Delete image</string>
+    <string name="image_load_failed">Couldn’t load the full image</string>
+    <string name="gallery_hint">Tap an image to view it. Long-press to select several.</string>
+    <plurals name="gallery_selected">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <plurals name="gallery_delete_title">
+        <item quantity="one">Delete %1$d image?</item>
+        <item quantity="other">Delete %1$d images?</item>
+    </plurals>
+    <string name="gallery_delete_message">They will be permanently deleted from this dataset.</string>
+
+    <!-- Camera -->
+    <string name="camera_permission_needed">Camera permission is needed to capture images.</string>
+    <string name="camera_allow">Allow camera</string>
+    <string name="camera_waiting">Waiting for camera permission…</string>
+    <string name="camera_denied">Camera access is off. Enable it for this app in Settings.</string>
+    <string name="camera_unavailable">This camera isn’t available on this device.</string>
+    <string name="camera_switch">Switch camera</string>
+    <string name="camera_hold_to_record">Tap or Hold to Capture</string>
+    <string name="camera_recording">Recording…</string>
+
+    <!-- Class balance -->
+    <string name="balance_title">Class balance</string>
+    <string name="stat_images">Images</string>
+    <string name="stat_classes">Classes</string>
+    <string name="stat_average">Per class</string>
+    <string name="balance_empty">Add images to see how they’re spread across classes.</string>
+    <string name="balance_balanced">Classes look balanced.</string>
+    <string name="balance_details">Show class balance</string>
+    <string name="balance_status_balanced">Balanced</string>
+    <string name="balance_status_empty">No images yet</string>
+    <plurals name="balance_status_tips">
+        <item quantity="one">%1$d tip</item>
+        <item quantity="other">%1$d tips</item>
+    </plurals>
+    <string name="balance_issue_two_classes">Add images to at least two classes to train a classifier.</string>
+    <string name="balance_issue_empty_classes">No images yet: %1$s</string>
+    <string name="balance_issue_few_images">Fewer than %1$d images: %2$s. More examples usually means a better model.</string>
+    <string name="balance_issue_imbalanced">%1$s has %2$s× as many images as %3$s. A model may favour the larger class.</string>
+
+    <!-- Export -->
+    <string name="export_title">Export dataset</string>
+    <string name="export_description">A zip of the dataset folder: one folder of images per class, plus metadata.json.</string>
+    <string name="export_empty_classes_note">Classes without images are left out.</string>
+    <string name="export_button">Export ZIP</string>
+
+    <!-- Progress -->
+    <string name="progress_preparing">Preparing…</string>
+    <string name="progress_importing">Importing %1$d of %2$d images</string>
+    <string name="progress_exporting">Exporting %1$d of %2$d images</string>
+    <string name="progress_converting">Converting %1$d of %2$d images</string>
+    <string name="progress_sorting">Sorting %1$d of %2$d images</string>
+
+    <!-- Image settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_open">Settings</string>
+    <string name="settings_image_heading">Image settings for new datasets</string>
+    <string name="settings_image_body">New datasets store captured and imported images this way. Each dataset keeps its own copy, which you can change from its menu.</string>
+    <string name="action_save">Save</string>
+    <string name="action_discard">Discard</string>
+    <string name="action_not_now">Not now</string>
+    <string name="action_convert">Convert</string>
+    <string name="settings_discard_title">Discard changes?</string>
+    <string name="settings_discard_message">Your changes to the image settings haven’t been saved.</string>
+    <string name="message_settings_saved">Image settings saved</string>
+    <string name="image_size_label">Image size</string>
+    <string name="resize_original">Original</string>
+    <string name="resize_fit">Fit</string>
+    <string name="resize_square">Square</string>
+    <string name="resize_original_hint">Images keep their own dimensions.</string>
+    <string name="resize_fit_hint">Scaled down so the longest side is at most %1$d px, keeping the aspect ratio.</string>
+    <string name="resize_square_hint">Center-cropped to a square and scaled down to %1$d × %1$d px.</string>
+    <string name="size_px">%1$d px</string>
+    <string name="image_format_label">Format</string>
+    <string name="format_original">Original</string>
+    <string name="format_original_hint">Images keep their own format.</string>
+    <string name="format_jpeg_hint">Small files; best for photos.</string>
+    <string name="format_png_hint">Lossless, so files are larger.</string>
+    <string name="format_webp_hint">Smaller than JPEG at similar quality.</string>
+    <string name="compression_label">Compression quality</string>
+    <string name="compression_value">%1$d</string>
+    <string name="compression_high">High</string>
+    <string name="compression_balanced">Balanced</string>
+    <string name="compression_small">Small</string>
+    <string name="compression_unused_png">PNG is lossless, so quality doesn’t apply.</string>
+    <string name="compression_unused_original">Images are stored untouched, so quality doesn’t apply.</string>
+    <string name="settings_passthrough_note">Images are stored exactly as captured or imported.</string>
+    <string name="settings_lossy_note">Converting resizes and re-encodes images. Pixels removed this way can’t be restored.</string>
+    <string name="apply_existing_title">Apply to existing datasets?</string>
+    <string name="apply_existing_message">Choose datasets to switch to these settings. Their images will be converted and the stored files replaced. This can’t be undone, so export first if you want to keep the originals.</string>
+    <string name="dataset_image_settings">Image settings</string>
+    <string name="dataset_image_settings_body">Images added to this dataset are stored this way.</string>
+    <string name="dataset_use_defaults">Use app defaults</string>
+    <plurals name="dataset_convert_existing">
+        <item quantity="one">Also convert the %1$d image already in this dataset</item>
+        <item quantity="other">Also convert the %1$d images already in this dataset</item>
+    </plurals>
+    <plurals name="convert_confirm_title">
+        <item quantity="one">Convert %1$d image?</item>
+        <item quantity="other">Convert %1$d images?</item>
+    </plurals>
+    <string name="convert_confirm_message">Stored images will be replaced: %1$s. This can’t be undone, so export the dataset first if you want to keep the originals.</string>
+    <plurals name="outdated_images">
+        <item quantity="one">%1$d image uses older image settings.</item>
+        <item quantity="other">%1$d images use older image settings.</item>
+    </plurals>
+    <plurals name="message_images_converted">
+        <item quantity="one">Converted %1$d image</item>
+        <item quantity="other">Converted %1$d images</item>
+    </plurals>
+    <plurals name="message_conversion_started">
+        <item quantity="one">Converting images in %1$d dataset</item>
+        <item quantity="other">Converting images in %1$d datasets</item>
+    </plurals>
+
+    <!-- Import preview -->
+    <string name="import_preview_title">Choose classes</string>
+    <string name="import_preview_body">This folder has folders inside class folders. Choose which folder names become classes.</string>
+    <string name="import_preview_body_splits">This dataset is split into %1$s folders.</string>
+    <string name="import_merge_splits">Merge %1$s into the same classes</string>
+    <string name="import_naming_label">Name classes after</string>
+    <string name="import_naming_top">Top folder</string>
+    <string name="import_naming_last">Last folder</string>
+    <string name="import_naming_full">Full path</string>
+    <string name="import_naming_example">For example “%1$s”</string>
+    <plurals name="import_class_count">
+        <item quantity="one">%1$d class</item>
+        <item quantity="other">%1$d classes</item>
+    </plurals>
+    <plurals name="import_loose_images">
+        <item quantity="one">%1$d image isn’t in a class folder and will be skipped.</item>
+        <item quantity="other">%1$d images aren’t in a class folder and will be skipped.</item>
+    </plurals>
+    <string name="action_import">Import</string>
+
+    <!-- Errors -->
+    <string name="error_not_found">That dataset no longer exists.</string>
+    <string name="error_disk_full">Not enough storage space.</string>
+    <string name="error_corrupt">The dataset’s files are damaged.</string>
+    <string name="error_unknown">Something went wrong. Please try again.</string>
+    <string name="error_archive_not_zip">That file isn’t a readable zip archive.</string>
+    <string name="error_archive_too_large">That file is too large to import.</string>
+    <string name="error_archive_no_images">No class folders with images were found.</string>
+    <string name="error_archive_empty_dataset">Add some images before exporting.</string>
+    <string name="error_sorting_unavailable">Auto-sort isn’t available on this device.</string>
+    <string name="error_name_blank">Enter a name.</string>
+    <string name="error_name_too_long">Use at most %1$d characters.</string>
+    <string name="error_name_duplicate">That name is already used.</string>
+</resources>
