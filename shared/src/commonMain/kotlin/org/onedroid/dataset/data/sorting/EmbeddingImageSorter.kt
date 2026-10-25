@@ -83,11 +83,12 @@ class EmbeddingImageSorter(
                 onProgress(done, missing.size)
             }
         }
-        return mutex.withLock {
+        val byClass = mutex.withLock {
             compactIfStale(dataset.id, imageIds.toSet())
-            val byClass = dataset.classes.associate { c -> c.id to c.imageIds.mapNotNull { cache[it] } }
-            Result.Success(ClassMatcher.fit(byClass))
+            dataset.classes.associate { c -> c.id to c.imageIds.mapNotNull { cache[it] } }
         }
+        // Fitting compares each class's images with each other, too slow for the caller's (often main) thread.
+        return Result.Success(withContext(Dispatchers.Default) { ClassMatcher.fit(byClass) })
     }
 
     override suspend fun embed(image: ByteArray): Result<FloatArray?, DataError.Sorting> {
