@@ -1,0 +1,91 @@
+dataset,variant,centring,grouping,scenario,mean,sd
+Flowers,Centroid,0,0,S1,0.616,0.146
+Flowers,Centroid,0,1,S1,0.616,0.146
+Flowers,Centroid,1,0,S1,0.672,0.119
+Flowers,Centroid,1,1,S1,0.672,0.119
+Flowers,Hybrid,0,0,S1,0.636,0.129
+Flowers,Hybrid,0,1,S1,0.636,0.129
+Flowers,Hybrid,1,0,S1,0.680,0.115
+Flowers,Hybrid,1,1,S1,0.680,0.115
+Flowers,Neighbours only,1,1,S1,0.704,0.125
+Flowers,Centroid,0,0,S2,0.796,0.028
+Flowers,Centroid,0,1,S2,0.796,0.028
+Flowers,Centroid,1,0,S2,0.792,0.026
+Flowers,Centroid,1,1,S2,0.792,0.026
+Flowers,Hybrid,0,0,S2,0.802,0.039
+Flowers,Hybrid,0,1,S2,0.802,0.039
+Flowers,Hybrid,1,0,S2,0.811,0.027
+Flowers,Hybrid,1,1,S2,0.811,0.027
+Flowers,Neighbours only,1,1,S2,0.808,0.034
+Flowers,Centroid,0,0,S3,0.850,0.018
+Flowers,Centroid,0,1,S3,0.850,0.018
+Flowers,Centroid,1,0,S3,0.841,0.018
+Flowers,Centroid,1,1,S3,0.840,0.017
+Flowers,Hybrid,0,0,S3,0.865,0.013
+Flowers,Hybrid,0,1,S3,0.865,0.013
+Flowers,Hybrid,1,0,S3,0.867,0.015
+Flowers,Hybrid,1,1,S3,0.867,0.015
+Flowers,Neighbours only,1,1,S3,0.870,0.017
+Flowers,Centroid,0,0,S4,0.706,0.054
+Flowers,Centroid,0,1,S4,0.748,0.070
+Flowers,Centroid,1,0,S4,0.678,0.060
+Flowers,Centroid,1,1,S4,0.721,0.071
+Flowers,Hybrid,0,0,S4,0.719,0.065
+Flowers,Hybrid,0,1,S4,0.751,0.070
+Flowers,Hybrid,1,0,S4,0.717,0.060
+Flowers,Hybrid,1,1,S4,0.743,0.072
+Flowers,Neighbours only,1,1,S4,0.739,0.063
+Flowers,Centroid,0,0,S5,0.812,0.024
+Flowers,Centroid,0,1,S5,0.826,0.026
+Flowers,Centroid,1,0,S5,0.794,0.030
+Flowers,Centroid,1,1,S5,0.816,0.021
+Flowers,Hybrid,0,0,S5,0.835,0.028
+Flowers,Hybrid,0,1,S5,0.838,0.032
+Flowers,Hybrid,1,0,S5,0.824,0.027
+Flowers,Hybrid,1,1,S5,0.841,0.028
+Flowers,Neighbours only,1,1,S5,0.845,0.030
+Imagewoof,Centroid,0,0,S1,0.732,0.096
+Imagewoof,Centroid,0,1,S1,0.732,0.096
+Imagewoof,Centroid,1,0,S1,0.748,0.092
+Imagewoof,Centroid,1,1,S1,0.748,0.092
+Imagewoof,Hybrid,0,0,S1,0.748,0.084
+Imagewoof,Hybrid,0,1,S1,0.748,0.084
+Imagewoof,Hybrid,1,0,S1,0.748,0.083
+Imagewoof,Hybrid,1,1,S1,0.748,0.083
+Imagewoof,Neighbours only,1,1,S1,0.760,0.083
+Imagewoof,Centroid,0,0,S2,0.829,0.027
+Imagewoof,Centroid,0,1,S2,0.829,0.027
+Imagewoof,Centroid,1,0,S2,0.824,0.023
+Imagewoof,Centroid,1,1,S2,0.824,0.023
+Imagewoof,Hybrid,0,0,S2,0.824,0.033
+Imagewoof,Hybrid,0,1,S2,0.824,0.033
+Imagewoof,Hybrid,1,0,S2,0.828,0.028
+Imagewoof,Hybrid,1,1,S2,0.828,0.028
+Imagewoof,Neighbours only,1,1,S2,0.812,0.034
+Imagewoof,Centroid,0,0,S3,0.860,0.010
+Imagewoof,Centroid,0,1,S3,0.860,0.010
+Imagewoof,Centroid,1,0,S3,0.857,0.008
+Imagewoof,Centroid,1,1,S3,0.857,0.008
+Imagewoof,Hybrid,0,0,S3,0.858,0.009
+Imagewoof,Hybrid,0,1,S3,0.858,0.009
+Imagewoof,Hybrid,1,0,S3,0.855,0.009
+Imagewoof,Hybrid,1,1,S3,0.855,0.009
+Imagewoof,Neighbours only,1,1,S3,0.832,0.012
+Imagewoof,Centroid,0,0,S4,0.804,0.025
+Imagewoof,Centroid,0,1,S4,0.829,0.033
+Imagewoof,Centroid,1,0,S4,0.800,0.028
+Imagewoof,Centroid,1,1,S4,0.828,0.033
+Imagewoof,Hybrid,0,0,S4,0.791,0.037
+Imagewoof,Hybrid,0,1,S4,0.825,0.032
+Imagewoof,Hybrid,1,0,S4,0.793,0.029
+Imagewoof,Hybrid,1,1,S4,0.826,0.025
+Imagewoof,Neighbours only,1,1,S4,0.808,0.034
+Imagewoof,Centroid,0,0,S5,0.841,0.015
+Imagewoof,Centroid,0,1,S5,0.856,0.011
+Imagewoof,Centroid,1,0,S5,0.837,0.018
+Imagewoof,Centroid,1,1,S5,0.852,0.014
+Imagewoof,Hybrid,0,0,S5,0.835,0.014
+Imagewoof,Hybrid,0,1,S5,0.847,0.011
+Imagewoof,Hybrid,1,0,S5,0.837,0.013
+Imagewoof,Hybrid,1,1,S5,0.848,0.009
+Imagewoof,Neighbours only,1,1,S5,0.825,0.012

@@ -19,8 +19,8 @@ abstract: |
   Across ten dataset-scenario pairs, closed-set accuracy improves by 2.0 points on average (range -0.6 to +5.2).
   The 95% confidence interval excludes zero in five pairs, all positive, and no pair is significantly worse. At matched retention of known images, the new
   matcher rejects far more images of unseen classes. At the default strictness on flowers it rejects 15.1% of
-  unknowns, against 2.1%, while keeping slightly more known images. Refits cost about 20x more (108 ms against 5 ms for 2,000 images on a laptop
-  CPU). An ablation finds near-duplicate weighting the most consistent component. Code, evaluation harness and
+  unknowns, against 2.1%, while keeping slightly more known images. Refits cost up to 65 times more and grow superlinearly, reaching about 1 s for
+  5,800 images on a laptop CPU. An ablation finds near-duplicate weighting the most consistent component. Code, evaluation harness and
   embedding script are released.
 ---
 
@@ -45,7 +45,7 @@ the usual benchmark setting:
 
 1. **No training step.** Classes change constantly as the user captures. Any per-change optimisation, even a
    linear probe, adds latency and complexity on a phone. A training-free matcher over frozen embeddings refits in
-   well under a second and needs no hyper-parameter search on the device.
+   under a second for datasets of a few thousand images and needs no hyper-parameter search on the device.
 2. **Tiny, growing classes.** A new class may hold one to five images, and the matcher must already behave sensibly.
 3. **Bursts.** DataDroid records about five frames per second while the shutter is held. A two-second hold adds ten
    near-identical images to one class. Statistics such as class means and spreads are then dominated by whichever
@@ -102,7 +102,13 @@ accuracy. Our evaluation excludes the held-out image's whole burst group when re
 DataDroid is written in Kotlin Multiplatform with Compose Multiplatform UI. About 85% of the Kotlin code, including
 the UI, storage, preprocessing, embedding cache and matcher, is shared between Android and iOS. Only the camera,
 image codecs, pickers, share sheet, zip inflation and model runtime are platform-specific. As a result, both platforms label images with
-identical logic.
+identical logic. Figure 1 shows the pipeline.
+
+![DataDroid auto-labelling pipeline](paper/figures/fig1_pipeline.png)
+
+**Figure 1.** DataDroid's auto-labelling pipeline. Each captured or imported image is preprocessed and embedded by the
+frozen MobileNetV3-Small backbone, then accepted into its best class or held in the unknown queue. Whenever the
+dataset changes, stored images are embedded once into the cache and the matcher is refitted off the UI thread.
 
 **Capture.** A tap captures one image. Holding the shutter records about five frames per second. Frames are
 centre-cropped to 640x640 squares.
@@ -145,6 +151,15 @@ The baseline has three weaknesses in this setting:
 - The single mean cannot represent classes with several looks.
 - In-sample radii are biased low, and bursts shrink them further, so the margin needed to accept ordinary images
   ends up large enough that unseen classes are rarely rejected (Section 6.3).
+
+![Schematic of burst pull and two-look classes](paper/figures/fig2_schematic.png)
+
+**Figure 2.** The two problems the matcher addresses, on synthetic two-dimensional points (real embeddings have 1,024
+dimensions and are compared by cosine similarity). (a) A burst of near-identical frames pulls an unweighted class
+mean towards one moment; weighting each near-duplicate group as one image keeps the mean near the class's photos.
+(b) For a class with two distinct looks, the class mean falls between them, so a query from one look can be
+closer to another class's mean. Its five nearest images of each class still favour the right class, which the
+neighbour term of the hybrid score uses.
 
 ## 4.3 Burst-aware matcher
 
@@ -279,10 +294,10 @@ matchers map strictness to margins differently, we compare them at matched reten
 
 ## 5.5 Implementation
 
-The main results (Tables 2, 3 and 5) come from the shipped Kotlin implementation, run as a JVM unit test
+The main results (Tables 2, 3 and 5; Figures 4, 5 and 7) come from the shipped Kotlin implementation, run as a JVM unit test
 (`MatcherBenchmark`). The baseline is the previous release's matcher, kept as a test fixture with its logic unchanged (only
 renamed). The
-ablation (Table 4) uses a NumPy re-implementation with identical scoring rules. Its random draws differ from the
+ablation (Table 4, Figure 6) uses a NumPy re-implementation with identical scoring rules. Its random draws differ from the
 Kotlin harness's, so its absolute numbers are not directly comparable to Table 2, only to each other. Timings
 were measured on an Apple M3 Pro laptop with OpenJDK 21.
 
@@ -310,6 +325,12 @@ $\tau = 0.85$ for simulated bursts.
 \*TF Flowers contains a few exact duplicate files. The matcher's grouping rule treats such a pair as one image,
 but the evaluation treats them as separate photos, so they can fall on both sides of a leave-one-out split. Both
 matchers are evaluated on the same splits, so neither is favoured by design.
+
+![Similarity of burst frames versus distinct photos](paper/figures/fig3_similarity.png)
+
+**Figure 3.** Cosine similarity between each simulated burst frame and its own source photo (green), and between each
+photo and the most similar other photo in the same dataset (grey). The grouping threshold τ = 0.85 separates the
+two almost completely.
 
 ## 6.2 Closed-set accuracy
 
@@ -343,6 +364,11 @@ On Imagewoof without bursts and with 20 or more photos per class, the two matche
 indistinguishable. A likely explanation is that each breed forms a compact, single cluster in this feature space,
 which suits a plain class mean. We did not measure this directly.
 
+![Paired accuracy differences with confidence intervals](paper/figures/fig4_closed_set.png)
+
+**Figure 4.** Paired change in leave-one-group-out accuracy (new matcher minus baseline) with 95% confidence intervals
+over 10 draws per scenario. Filled markers: the interval excludes zero.
+
 ## 6.3 Open-set rejection
 
 **Table 3.** Known retention / unknown rejection, pooled over all scenarios and draws (one class held out as unknown
@@ -355,6 +381,12 @@ per draw).
 | 50 (default) | 0.839 / 0.021 | 0.852 / 0.151 | 0.850 / 0.027 | 0.822 / 0.251 |
 | 75 | 0.805 / 0.145 | 0.783 / 0.461 | 0.822 / 0.183 | 0.749 / 0.567 |
 | 100 | 0.621 / 0.639 | 0.635 / 0.797 | 0.610 / 0.824 | 0.603 / 0.832 |
+
+![Open-set operating curves](paper/figures/fig5_open_set.png)
+
+**Figure 5.** Open-set operating curves as strictness rises from 0 (left end) to 100 (right end): share of unknown-class
+images rejected against share of known images kept in their correct class. Larger markers show the default
+strictness (s = 50). Curves further up and to the right are better.
 
 At its default strictness the baseline almost never rejects an unseen class (2 to 3%). Its inflated margin, needed
 to compensate for in-sample radii, makes the lower half of the strictness slider nearly inert. Compared at matched
@@ -409,6 +441,11 @@ The ablation leads to four observations:
   deployment that cannot afford neighbour search could take most of the burst benefit without it, though
   grouping remains the main refit cost.
 
+![Ablation of matcher components](paper/figures/fig6_ablation.png)
+
+**Figure 6.** Ablation: closed-set accuracy averaged over S1 to S5 for each matcher variant (NumPy re-implementation).
+Orange marks the baseline scoring, also drawn as a reference line; blue marks the deployed matcher.
+
 ## 6.5 Cost
 
 **Table 5.** Mean time per refit and per query with all pool images in the dataset (JVM, Apple M3 Pro, after
@@ -419,12 +456,26 @@ warm-up).
 | Baseline fit / match | 2.8 ms / 0.01 ms | 5.3 ms / 0.01 ms |
 | Ours fit / match | 59.5 ms / 0.82 ms | 107.8 ms / 1.53 ms |
 
-Refits are about 20 times slower. We expect near-duplicate grouping and radius probes to dominate this cost, but
-we did not profile it. At 2,000 images a refit
-takes about 0.1 s on a laptop core and plausibly several times longer on a mid-range phone. Because refits are
-conflated and run off the UI thread, this delays how quickly new images influence labelling but does not block the
-interface. Per-query cost is linear in dataset size and, on the laptop, stays well under the 200 ms budget of
-five frames per second at these sizes. We did not measure on-device timings for this paper.
+On the evaluation pools, refits are about 20 times slower than the baseline's. Figure 7 extends this to larger
+datasets, using a pool of 5,800 Imagewoof embeddings (500 photos and 20 five-frame bursts per class) cut into random
+per-class subsets of 250 to 5,800 images. Each refit time is the median of 9 runs after 5 warm-up runs. Refit time
+grows superlinearly: from 9 ms at 250 images to 176 ms at 2,000 and 1,071 ms at 5,800, against 1 to 17 ms for the
+baseline (8 to 65 times slower). At 2,000 images this is slower than in Table 5 (176 against 108 ms), because
+random subsets of the larger pool hold proportionally fewer burst frames, so grouping compares against more
+distinct groups. Match time grows linearly, reaching 4.3 ms per query at 5,800 images.
+
+We expect near-duplicate grouping and radius probes to dominate refit cost, but we did not profile it. On a
+mid-range phone a refit plausibly takes several times longer than on the laptop core, which would be seconds for
+datasets of several thousand images. Because refits are conflated and run off the UI thread, this delays how
+quickly new images influence labelling but does not block the interface. Per-query cost stays well under the 200 ms
+budget of five frames per second at these sizes on the laptop. We did not measure on-device timings for this
+paper.
+
+![Refit and match time against dataset size](paper/figures/fig7_cost.png)
+
+**Figure 7.** Cost as the dataset grows (JVM on an Apple M3 Pro; random per-class subsets of a 5,800-image Imagewoof pool).
+(a) Refit time on a log scale, median of 9 refits. (b) Time to match one image.
+
 
 # 7 Limitations
 
@@ -443,8 +494,9 @@ five frames per second at these sizes. We did not measure on-device timings for 
 - **Dependent draws.** The 10 draws per scenario sample from a pool of 120 photos per class, so they are not
   independent. The paired t-intervals are therefore somewhat optimistic, and we report win counts alongside them.
   We did not correct for the ten comparisons in Table 2.
-- **Scale.** We evaluated up to 2,000 images. Larger datasets increase refit cost super-linearly in the grouping
-  step.
+- **Scale.** Accuracy was evaluated on up to 2,000 images per dataset and cost on up to 5,800. Refit cost grows
+  superlinearly (Figure 7) and reaches about 1 s at 5,800 images on a laptop, likely several seconds on a phone.
+  Larger datasets need incremental fitting (Section 8).
 - **No user study.** We measure classification quality, not the time saved for users or how they respond to
   rejections.
 
@@ -473,7 +525,7 @@ similarity, and measuring rejection radii leave-one-group-out together give the 
 - an average of 2.0 points better closed-set accuracy, with up to 5.2 points in small or burst-heavy classes and no
   significant losses;
 - markedly better unknown rejection at matched retention;
-- at the price of a roughly 20 times costlier refit.
+- at the price of a refit up to 65 times costlier, reaching about 1 s at 5,800 images on a laptop.
 
 All code, including the evaluation harness, is open source.
 
@@ -488,7 +540,21 @@ folder, so the embedding paths must be absolute):
 ```bash
 python tools/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <flower_photos dir> flowers.bin 120 20
 python tools/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <imagewoof2-160/train dir> woof.bin 120 20
-DATADROID_EMBEDDINGS=$PWD/flowers.bin,$PWD/woof.bin ./gradlew :shared:testAndroidHostTest --tests '*MatcherBenchmark*' --rerun -i
+DATADROID_EMBEDDINGS=$PWD/flowers.bin,$PWD/woof.bin ./gradlew :shared:testAndroidHostTest --tests '*MatcherBenchmark.compareMatchers' --rerun -i
+```
+
+For Figure 7, embed a larger pool and run the cost test:
+
+```bash
+python tools/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <imagewoof2-160/train dir> woof_large.bin 500 20
+DATADROID_EMBEDDINGS=$PWD/woof_large.bin ./gradlew :shared:testAndroidHostTest --tests '*MatcherBenchmark.measureCost' --rerun -i
+```
+
+The results behind every figure are in `paper/data` as CSV files, and `tools/paper_figures.py` redraws all figures
+from them (it needs matplotlib and numpy):
+
+```bash
+python tools/paper_figures.py
 ```
 
 # Acknowledgements

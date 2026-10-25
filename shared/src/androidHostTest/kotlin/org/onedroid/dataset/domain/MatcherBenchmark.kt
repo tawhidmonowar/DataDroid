@@ -92,15 +92,31 @@ class MatcherBenchmark {
                     "s=${strictnesses[i]} %.3f/%.3f".format(kept[i] / known, rejected[i] / unknown)
                 })
             }
+        }
+    }
 
-            println("Cost with all ${images.size} images (JVM, after warm-up)")
-            val byClass = images.groupBy({ it.sample.classId }, { it.sample.embedding })
-            for ((name, fit) in matchers) {
-                repeat(3) { fit(byClass) }
-                var fitted: (FloatArray, Int) -> ClassMatch = fit(byClass)
-                val fitMillis = kotlin.system.measureNanoTime { repeat(5) { fitted = fit(byClass) } } / 5e6
-                val matchMillis = kotlin.system.measureNanoTime { images.take(200).forEach { fitted(it.sample.embedding, 50) } } / 200e6
-                println("  $name: fit %.1f ms, match %.2f ms".format(fitMillis, matchMillis))
+    /**
+     * Refit and match time as the dataset grows: each file's images are shuffled per class and cut to a range of
+     * sizes. Prints `cost,<matcher>,<images>,<median fit ms>,<mean match ms>` lines.
+     */
+    @Test
+    fun measureCost() {
+        val files = System.getenv("DATADROID_EMBEDDINGS")?.split(',')?.filter { it.isNotBlank() } ?: return
+        for (path in files) {
+            val byClass = read(File(path)).groupBy { it.sample.classId }.mapValues { (_, images) -> images.shuffled(Random(0)) }
+            val total = byClass.values.sumOf { it.size }
+            println("\n== ${File(path).name}: cost by dataset size (JVM, median of $COST_RUNS fits after warm-up) ==")
+            for (size in COST_SIZES.filter { it <= total } + total) {
+                val subset = byClass.mapValues { (_, images) -> images.take(size * images.size / total).map { it.sample.embedding } }
+                val queries = subset.values.flatten().take(COST_QUERIES)
+                for ((name, fit) in matchers) {
+                    repeat(COST_WARMUPS) { fit(subset) }
+                    val fits = List(COST_RUNS) { kotlin.system.measureNanoTime { fit(subset) } / 1e6 }.sorted()
+                    val fitted = fit(subset)
+                    queries.forEach { fitted(it, 50) }
+                    val matchMillis = kotlin.system.measureNanoTime { queries.forEach { fitted(it, 50) } } / 1e6 / queries.size
+                    println("cost,$name,${subset.values.sumOf { it.size }},%.2f,%.4f".format(fits[fits.size / 2], matchMillis))
+                }
             }
         }
     }
@@ -139,6 +155,10 @@ class MatcherBenchmark {
         /** "DDEV": DataDroid evaluation embeddings. */
         const val MAGIC = 0x44444556
         const val REPEATS = 10
+        val COST_SIZES = listOf(250, 500, 1000, 2000, 3000, 4000, 5000)
+        const val COST_WARMUPS = 5
+        const val COST_RUNS = 9
+        const val COST_QUERIES = 200
 
         /** Student's t 97.5th percentile with REPEATS - 1 = 9 degrees of freedom. */
         const val T_975_9 = 2.262
