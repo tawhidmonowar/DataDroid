@@ -16,10 +16,10 @@ abstract: |
   of its five nearest images, and rejects unknowns with per-class radii measured leave-one-group-out. We compare it
   with the app's previous nearest-class-mean matcher under leave-one-out evaluation that excludes the held-out
   image's own burst. We use embeddings from the app's model on TF Flowers and Imagewoof with simulated bursts.
-  Across ten scenarios, closed-set accuracy improves by 2.0 points on average (range -0.6 to +5.2). The gain is
-  significant in five scenarios and significantly negative in none. At matched retention of known images, the new
-  matcher rejects far more images of unseen classes. On flowers it rejects 15.1% of unknowns, against 2.1%, while
-  keeping slightly more known images. Refits cost about 20x more (108 ms against 5 ms for 2,000 images on a laptop
+  Across ten dataset-scenario pairs, closed-set accuracy improves by 2.0 points on average (range -0.6 to +5.2).
+  The 95% confidence interval excludes zero in five pairs, all positive, and no pair is significantly worse. At matched retention of known images, the new
+  matcher rejects far more images of unseen classes. At the default strictness on flowers it rejects 15.1% of
+  unknowns, against 2.1%, while keeping slightly more known images. Refits cost about 20x more (108 ms against 5 ms for 2,000 images on a laptop
   CPU). An ablation finds near-duplicate weighting the most consistent component. Code, evaluation harness and
   embedding script are released.
 ---
@@ -45,7 +45,7 @@ the usual benchmark setting:
 
 1. **No training step.** Classes change constantly as the user captures. Any per-change optimisation, even a
    linear probe, adds latency and complexity on a phone. A training-free matcher over frozen embeddings refits in
-   milliseconds and needs no hyper-parameter search on the device.
+   well under a second and needs no hyper-parameter search on the device.
 2. **Tiny, growing classes.** A new class may hold one to five images, and the matcher must already behave sensibly.
 3. **Bursts.** DataDroid records about five frames per second while the shutter is held. A two-second hold adds ten
    near-identical images to one class. Statistics such as class means and spreads are then dominated by whichever
@@ -62,8 +62,8 @@ Our contributions are:
   (Section 3).
 - A burst-aware matcher combining near-duplicate group weighting, mean centring, a centroid and nearest-neighbour
   hybrid score, and leave-one-group-out radius estimation for unknown rejection (Section 4).
-- A leave-one-out evaluation protocol that excludes the held-out image's near-duplicates, without which any
-  matcher looks near-perfect on burst-heavy data. It is released as part of the app's shared code (Section 5).
+- A leave-one-out evaluation protocol that excludes the held-out image's near-duplicates, without which
+  near-duplicate frames inflate measured accuracy on burst-heavy data. It is released as part of the app's shared code (Section 5).
 - An evaluation on embeddings from the deployed model for two public datasets with simulated bursts. It reports
   paired confidence intervals, open-set operating points, an ablation and refit cost (Section 6). We are explicit
   about its limitations (Section 7).
@@ -101,7 +101,7 @@ accuracy. Our evaluation excludes the held-out image's whole burst group when re
 
 DataDroid is written in Kotlin Multiplatform with Compose Multiplatform UI. About 85% of the Kotlin code, including
 the UI, storage, preprocessing, embedding cache and matcher, is shared between Android and iOS. Only the camera,
-image codecs, pickers and model runtime are platform-specific. As a result, both platforms label images with
+image codecs, pickers, share sheet, zip inflation and model runtime are platform-specific. As a result, both platforms label images with
 identical logic.
 
 **Capture.** A tap captures one image. Holding the shutter records about five frames per second. Frames are
@@ -112,14 +112,14 @@ and mapped to RGB values in [0, 1]. A MobileNetV3-Small image embedder (MediaPip
 1,024-dimensional feature vector. Inference uses LiteRT on Android and the TensorFlow Lite C API on iOS, with four
 threads. The model is loaded once and shared by all open datasets.
 
-**Embedding cache.** Each image's embedding is appended to a per-dataset binary file, so every image is embedded
-only once. The matcher is refitted from cached embeddings whenever the dataset changes, for example after an image
+**Embedding cache.** Each stored image's embedding is appended to a per-dataset binary file, so each stored image
+is embedded only once for the cache. A newly captured frame is also embedded once beforehand, to choose its class. The matcher is refitted from cached embeddings whenever the dataset changes, for example after an image
 is added, moved or deleted, or a class is created. Refits are conflated, so only the latest dataset state is fitted.
 Refitting happens off the UI thread.
 
 **Labelling.** For each captured frame or imported photo, the app embeds the image and asks the matcher for a class.
 If the image is within the class's acceptance radius (scaled by the strictness setting), it is saved to that class.
-Otherwise it is held under *Unknown* with a preview and the closest class. A strictness of 0 disables rejection.
+Otherwise it is held under *Unknown* with a preview, and the live camera hint shows the closest class. A strictness of 0 disables rejection.
 
 # 4 Method
 
@@ -178,8 +178,9 @@ classes, or 0.75 if no class can be measured (the low end of radii measured in o
 Radii are floored at 0.12.
 
 **Acceptance.** An image is accepted if $s = 0$ or $d \le r_{k^*} \cdot m'(s)$ with
-$m'(s) = 1.3 + (0.9 - 1.3)\, s/100$. Leave-one-group-out radii are unbiased estimates of how far a new image of the
-class lands, so the useful margin range is much narrower than the baseline's. The end points 1.3 and 0.9 were
+$m'(s) = 1.3 + (0.9 - 1.3)\, s/100$. Leave-one-group-out radii approximately estimate how far a new image of the class
+lands (slightly conservatively, since each probe is scored with its own group removed and at most 32 groups are
+probed), so the useful margin range is much narrower than the baseline's. The end points 1.3 and 0.9 were
 chosen from operating curves (Section 7 discusses the resulting bias).
 
 The fitting procedure is summarised below.
@@ -279,7 +280,8 @@ matchers map strictness to margins differently, we compare them at matched reten
 ## 5.5 Implementation
 
 The main results (Tables 2, 3 and 5) come from the shipped Kotlin implementation, run as a JVM unit test
-(`MatcherBenchmark`). The baseline is the previous release's matcher, kept verbatim as a test fixture. The
+(`MatcherBenchmark`). The baseline is the previous release's matcher, kept as a test fixture with its logic unchanged (only
+renamed). The
 ablation (Table 4) uses a NumPy re-implementation with identical scoring rules. Its random draws differ from the
 Kotlin harness's, so its absolute numbers are not directly comparable to Table 2, only to each other. Timings
 were measured on an Apple M3 Pro laptop with OpenJDK 21.
@@ -293,7 +295,7 @@ about 59% of components are negative and the mean cosine similarity between imag
 Even so, same-class and different-class similarities overlap heavily. On flowers the mean same-class similarity
 (0.230) is less than twice the different-class one (0.124). Simulated burst frames are far more similar to their
 source photos than distinct photos are to each other, which makes near-duplicate grouping reliable at
-$\tau = 0.85$.
+$\tau = 0.85$ for simulated bursts.
 
 **Table 1.** Statistics of 1,024-d embeddings (frame-0 images; cosine similarity of unit vectors).
 
@@ -301,11 +303,13 @@ $\tau = 0.85$.
 |---|---|---|
 | Fraction of negative components | 0.588 | 0.586 |
 | Mean cosine, same class / different class | 0.241 / 0.069 | 0.230 / 0.124 |
-| Same after centring on dataset mean | 0.169 / -0.019 | 0.100 / -0.027 |
+| Mean cosine after centring, same class / different class | 0.169 / -0.019 | 0.100 / -0.027 |
 | Burst frame vs its source photo: 5th percentile / median | 0.864 / 0.925 | 0.872 / 0.938 |
 | Nearest distinct photo: 95th percentile / max | 0.679 / 0.818 | 0.752 / 0.999* |
 
-\*TF Flowers contains a few exact duplicate files. The grouping rule correctly treats them as one image.
+\*TF Flowers contains a few exact duplicate files. The matcher's grouping rule treats such a pair as one image,
+but the evaluation treats them as separate photos, so they can fall on both sides of a leave-one-out split. Both
+matchers are evaluated on the same splits, so neither is favoured by design.
 
 ## 6.2 Closed-set accuracy
 
@@ -327,17 +331,17 @@ count as non-wins).
 | Imagewoof | S5: 30 photos + bursts | 0.844 ± 0.022 | 0.847 ± 0.023 | +0.3 (-0.6, +1.2) | 6/10 |
 
 Averaged over the ten dataset and scenario pairs, accuracy improves by 2.0 points. The confidence interval excludes
-zero in five pairs (bold), all positive. No pair shows a significant loss. The gains concentrate where the method's
+zero in five pairs (bold), all positive (uncorrected for multiple comparisons). No pair shows a significant loss. The gains concentrate where the method's
 design predicts:
 
-- In small classes (S1), centring helps most.
-- With bursts (S4, S5), group weighting helps most.
-- On flowers, whose classes are visually multi-modal, the neighbour term adds 1.5 to 2.4 points even at 60 photos
-  per class.
+- In small classes (S1), centring helps most (Table 4).
+- With bursts (S4, S5), group weighting helps most (Table 4).
+- On flowers, the neighbour term adds about 1.5 points even at 60 photos per class (Table 4), consistent with
+  classes that have several distinct looks.
 
 On Imagewoof without bursts and with 20 or more photos per class, the two matchers are statistically
-indistinguishable. Fine-grained breeds are compact, unimodal clusters in this feature space, which suits a plain
-class mean.
+indistinguishable. A likely explanation is that each breed forms a compact, single cluster in this feature space,
+which suits a plain class mean. We did not measure this directly.
 
 ## 6.3 Open-set rejection
 
@@ -368,7 +372,8 @@ cost of 2.8 points of known retention. This is a product decision. Users who pre
 strictness.
 
 Unseen *sibling* classes, such as another dog breed or another flower, are a hard case for open-set rejection. Even
-at maximum strictness, about 17% to 20% of such images are accepted into a neighbouring class.
+at maximum strictness, our matcher accepts about 17% to 20% of such images into a neighbouring class (the
+baseline accepts 18% to 36%).
 
 ## 6.4 Ablation
 
@@ -390,7 +395,7 @@ at maximum strictness, about 17% to 20% of such images are accepted into a neigh
 
 The ablation leads to four observations:
 
-- **Grouping** is the most consistent component. It never hurts, because without bursts no groups form. In the
+- **Grouping** is the most consistent component. It never hurts, because without bursts almost no images pass $\tau$. In the
   burst scenarios it adds 1.4 to 4.2 points to the centroid matcher (for example flowers S4: 0.706 to 0.748;
   Imagewoof S4: 0.804 to 0.829).
 - **Centring** is scenario-dependent. It helps markedly with five photos per class (flowers S1: 0.616 to 0.672;
@@ -401,7 +406,8 @@ The ablation leads to four observations:
   Using neighbours *alone* is best on flowers but worst on Imagewoof (0.807). The blend is the most robust choice
   across both datasets.
 - On Imagewoof, the simplest improvement, centroid plus grouping (0.821), matches the full method (0.821). A
-  deployment that cannot afford neighbour search could take most of the burst benefit at baseline cost.
+  deployment that cannot afford neighbour search could take most of the burst benefit without it, though
+  grouping remains the main refit cost.
 
 ## 6.5 Cost
 
@@ -413,23 +419,26 @@ warm-up).
 | Baseline fit / match | 2.8 ms / 0.01 ms | 5.3 ms / 0.01 ms |
 | Ours fit / match | 59.5 ms / 0.82 ms | 107.8 ms / 1.53 ms |
 
-Refits are about 20 times slower, dominated by near-duplicate grouping and radius probes. At 2,000 images a refit
+Refits are about 20 times slower. We expect near-duplicate grouping and radius probes to dominate this cost, but
+we did not profile it. At 2,000 images a refit
 takes about 0.1 s on a laptop core and plausibly several times longer on a mid-range phone. Because refits are
 conflated and run off the UI thread, this delays how quickly new images influence labelling but does not block the
-interface. Per-query cost is linear in dataset size and stays well under the 200 ms budget of five frames per
-second at these sizes. We did not measure on-device timings for this paper.
+interface. Per-query cost is linear in dataset size and, on the laptop, stays well under the 200 ms budget of
+five frames per second at these sizes. We did not measure on-device timings for this paper.
 
 # 7 Limitations
 
 - **Hyper-parameters were chosen on the evaluation data.** The duplicate threshold, $K$, the coverage, the fallback
   radius and the margin end points were selected by inspecting the same two datasets used for evaluation, with
-  small numbers of draws. The closed-set gains depend only on $\tau$ and $K$. However, the open-set operating points
-  in particular may be optimistic for other data. A held-out set of datasets would give a cleaner estimate.
+  small numbers of draws. The closed-set gains depend only on $\tau$, $K$ and the fixed
+  0.5 blend weight. The final variant was also selected among alternatives on these same datasets, which biases
+  the comparison in its favour. The open-set operating points in particular may be optimistic for other data. A held-out set of datasets would give a cleaner estimate.
 - **Simulated bursts.** Real bursts include motion blur, focus hunting and changing backgrounds that our crop and
   brightness jitter does not model. Real bursts may also be less similar than simulated ones, in which case fewer
   frames group together.
-- **Backbone pre-training overlap.** Imagewoof's breeds are ImageNet classes, and the MediaPipe embedder was
-  pre-trained on ImageNet-scale data. This likely favours both matchers and may understate the benefit of
+- **Backbone pre-training overlap.** Imagewoof's breeds are ImageNet classes, and its training split is drawn
+  from the ImageNet training set. The MediaPipe embedder was pre-trained on ImageNet-scale data, so it may have
+  seen these exact images, not just these breeds. This likely favours both matchers and may understate the benefit of
   structure-aware scoring on genuinely novel domains. Only one backbone was evaluated.
 - **Dependent draws.** The 10 draws per scenario sample from a pool of 120 photos per class, so they are not
   independent. The paired t-intervals are therefore somewhat optimistic, and we report win counts alongside them.
@@ -442,7 +451,7 @@ second at these sizes. We did not measure on-device timings for this paper.
 # 8 Future work
 
 - **Incremental fitting.** Groups, sums and radii can be updated when an image is added instead of refitted from
-  scratch. This would bring refit cost back to near the baseline.
+  scratch. This could greatly reduce refit cost.
 - **Stronger backbones.** MobileCLIP-class encoders would also allow zero-shot labelling into classes that have a name
   but no images yet.
 - **Temporal smoothing.** Live predictions over consecutive frames could be smoothed.
@@ -473,12 +482,13 @@ All code, including the evaluation harness, is open source.
 DataDroid, including the matcher (`ClassMatcher.kt`), the evaluator (`LeaveOneOut.kt`), the baseline fixture
 (`LegacyClassMatcher.kt`), the benchmark (`MatcherBenchmark.kt`) and the embedding script
 (`tools/embed_dataset.py`), is available at <https://github.com/tawhidmonowar/DataDroid> under the Apache 2.0
-licence. To reproduce Tables 2, 3 and 5:
+licence. To reproduce Tables 2, 3 and 5 (run from the repository root; Gradle runs the test from the `shared`
+folder, so the embedding paths must be absolute):
 
 ```bash
 python tools/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <flower_photos dir> flowers.bin 120 20
 python tools/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <imagewoof2-160/train dir> woof.bin 120 20
-DATADROID_EMBEDDINGS=flowers.bin,woof.bin ./gradlew :shared:testAndroidHostTest --tests '*MatcherBenchmark*' --rerun -i
+DATADROID_EMBEDDINGS=$PWD/flowers.bin,$PWD/woof.bin ./gradlew :shared:testAndroidHostTest --tests '*MatcherBenchmark*' --rerun -i
 ```
 
 # Acknowledgements
