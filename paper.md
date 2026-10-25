@@ -1,5 +1,5 @@
 ---
-title: "Burst-Aware, Training-Free Auto-Sorting for On-Device Image Dataset Collection"
+title: "DataDroid: An Image Dataset Builder for Mobile Devices Using Frozen-Backbone Embeddings to Auto-Label Images"
 author:
   - name: Tawhid Monowar
     affiliation: "[Affiliation]"
@@ -7,11 +7,11 @@ author:
 date: "[Month Year]"
 abstract: |
   Building an image classification dataset on a phone usually means picking a class before every shot. We study
-  *auto-sorting*: capture first, and let the device file each image into the class it most resembles, or hold it
+  *auto-labelling*: capture first, and let the device file each image into the class it most resembles, or hold it
   aside as unknown. The setting needs no training step, starts from classes of a few images, and must cope with
   camera bursts that add runs of near-identical frames. We describe DataDroid, an open-source Kotlin Multiplatform
-  app for Android and iOS that runs auto-sorting entirely on the device. It uses a frozen MobileNetV3-Small
-  embedder and a training-free matcher. The matcher weights each group of near-duplicate frames as one image,
+  app for Android and iOS that runs auto-labelling entirely on the device. It uses a frozen MobileNetV3-Small
+  backbone as the embedder and a training-free matcher. The matcher weights each group of near-duplicate frames as one image,
   centres embeddings on the dataset mean, scores a class by blending centroid similarity with the mean similarity
   of its five nearest images, and rejects unknowns with per-class radii measured leave-one-group-out. We compare it
   with the app's previous nearest-class-mean matcher under leave-one-out evaluation that excludes the held-out
@@ -34,12 +34,13 @@ because a forgotten class switch silently mislabels a run of images.
 
 DataDroid is an open-source app for Android and iOS that turns a phone into a dataset studio. Users create datasets
 and classes, capture or import images, check class balance, and export a zip of class folders ready for training.
-Its *auto-sort* mode removes the class-switching step. The user captures without choosing a class. The app embeds
+Its *auto-labelling* mode (shown as *Auto-sort* in the app) removes the class-switching step. The user captures
+without choosing a class. The app embeds
 each image with an on-device network and files it into the class it most resembles. Images that resemble no class
 are held under *Unknown*, where one tap starts a new class with them. Everything runs offline, so no image leaves
 the device.
 
-Auto-sorting is a form of few-shot, open-set classification, but several practical constraints set it apart from
+Auto-labelling is a form of few-shot, open-set classification, but several practical constraints set it apart from
 the usual benchmark setting:
 
 1. **No training step.** Classes change constantly as the user captures. Any per-change optimisation, even a
@@ -57,7 +58,7 @@ accounts for bursts.
 
 Our contributions are:
 
-- A description of a complete on-device, training-free auto-sorting pipeline shared across Android and iOS
+- A description of a complete on-device, training-free auto-labelling pipeline shared across Android and iOS
   (Section 3).
 - A burst-aware matcher combining near-duplicate group weighting, mean centring, a centroid and nearest-neighbour
   hybrid score, and leave-one-group-out radius estimation for unknown rejection (Section 4).
@@ -100,7 +101,7 @@ accuracy. Our evaluation excludes the held-out image's whole burst group when re
 
 DataDroid is written in Kotlin Multiplatform with Compose Multiplatform UI. About 85% of the Kotlin code, including
 the UI, storage, preprocessing, embedding cache and matcher, is shared between Android and iOS. Only the camera,
-image codecs, pickers and model runtime are platform-specific. As a result, both platforms sort images with
+image codecs, pickers and model runtime are platform-specific. As a result, both platforms label images with
 identical logic.
 
 **Capture.** A tap captures one image. Holding the shutter records about five frames per second. Frames are
@@ -116,7 +117,7 @@ only once. The matcher is refitted from cached embeddings whenever the dataset c
 is added, moved or deleted, or a class is created. Refits are conflated, so only the latest dataset state is fitted.
 Refitting happens off the UI thread.
 
-**Sorting.** For each captured frame or imported photo, the app embeds the image and asks the matcher for a class.
+**Labelling.** For each captured frame or imported photo, the app embeds the image and asks the matcher for a class.
 If the image is within the class's acceptance radius (scaled by the strictness setting), it is saved to that class.
 Otherwise it is held under *Unknown* with a preview and the closest class. A strictness of 0 disables rejection.
 
@@ -414,7 +415,7 @@ warm-up).
 
 Refits are about 20 times slower, dominated by near-duplicate grouping and radius probes. At 2,000 images a refit
 takes about 0.1 s on a laptop core and plausibly several times longer on a mid-range phone. Because refits are
-conflated and run off the UI thread, this delays how quickly new images influence sorting but does not block the
+conflated and run off the UI thread, this delays how quickly new images influence labelling but does not block the
 interface. Per-query cost is linear in dataset size and stays well under the 200 ms budget of five frames per
 second at these sizes. We did not measure on-device timings for this paper.
 
@@ -442,17 +443,17 @@ second at these sizes. We did not measure on-device timings for this paper.
 
 - **Incremental fitting.** Groups, sums and radii can be updated when an image is added instead of refitted from
   scratch. This would bring refit cost back to near the baseline.
-- **Stronger backbones.** MobileCLIP-class encoders would also allow zero-shot sorting into classes that have a name
+- **Stronger backbones.** MobileCLIP-class encoders would also allow zero-shot labelling into classes that have a name
   but no images yet.
 - **Temporal smoothing.** Live predictions over consecutive frames could be smoothed.
-- **In-app accuracy estimates.** The released leave-one-out evaluator could show users an estimated auto-sort
-  accuracy for their own dataset and suggest a strictness.
+- **In-app accuracy estimates.** The released leave-one-out evaluator could show users an estimated
+  auto-labelling accuracy for their own dataset and suggest a strictness.
 - **Real-burst benchmark.** A benchmark of real burst captures with ground-truth classes would validate the
   grouping threshold.
 
 # 9 Conclusion
 
-Auto-sorting turns dataset collection on a phone from "choose, then shoot" into "shoot, then confirm". Training-free
+Auto-labelling turns dataset collection on a phone from "choose, then shoot" into "shoot, then confirm". Training-free
 matching over frozen on-device embeddings is enough to make it practical. However, the details that matter differ
 from those in standard few-shot benchmarks: bursts of near-duplicates and the need to reject unseen classes dominate
 the behaviour users experience.
