@@ -250,7 +250,7 @@ transposition, centre square crop, bilinear resize to 224x224, and scaling to [0
 **Simulated bursts.** For the first 20 sampled photos of each class, we add four *neighbouring frames*. Each is a
 square crop of 88% to 98% of the short side, offset by up to ±4% of the side, with brightness scaled by 0.9 to 1.1.
 This gives five frames per burst, matching about one second of DataDroid's hold-to-record capture. The result is
-1,000 embeddings for flowers and 2,000 for Imagewoof. The embedding script (`tools/embed_dataset.py`) is released.
+1,000 embeddings for flowers and 2,000 for Imagewoof. The embedding script (`scripts`) is released.
 
 ## 5.2 Scenarios
 
@@ -533,28 +533,28 @@ All code, including the evaluation harness, is open source.
 
 DataDroid, including the matcher (`ClassMatcher.kt`), the evaluator (`LeaveOneOut.kt`), the baseline fixture
 (`LegacyClassMatcher.kt`), the benchmark (`MatcherBenchmark.kt`) and the embedding script
-(`tools/embed_dataset.py`), is available at <https://github.com/tawhidmonowar/DataDroid> under the Apache 2.0
+(`scripts`), is available at <https://github.com/tawhidmonowar/DataDroid> under the Apache 2.0
 licence. To reproduce Tables 2, 3 and 5 (run from the repository root; Gradle runs the test from the `shared`
 folder, so the embedding paths must be absolute):
 
 ```bash
-python tools/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <flower_photos dir> flowers.bin 120 20
-python tools/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <imagewoof2-160/train dir> woof.bin 120 20
+python scripts/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <flower_photos dir> flowers.bin 120 20
+python scripts/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <imagewoof2-160/train dir> woof.bin 120 20
 DATADROID_EMBEDDINGS=$PWD/flowers.bin,$PWD/woof.bin ./gradlew :shared:testAndroidHostTest --tests '*MatcherBenchmark.compareMatchers' --rerun -i
 ```
 
 For Figure 7, embed a larger pool and run the cost test:
 
 ```bash
-python tools/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <imagewoof2-160/train dir> woof_large.bin 500 20
+python scripts/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <imagewoof2-160/train dir> woof_large.bin 500 20
 DATADROID_EMBEDDINGS=$PWD/woof_large.bin ./gradlew :shared:testAndroidHostTest --tests '*MatcherBenchmark.measureCost' --rerun -i
 ```
 
-The results behind every figure are in `paper/data` as CSV files, and `tools/paper_figures.py` redraws all figures
+The results behind every figure are in `paper/data` as CSV files, and `scripts` redraws all figures
 from them (it needs matplotlib and numpy):
 
 ```bash
-python tools/paper_figures.py
+python scripts/paper_figures.py
 ```
 
 # Acknowledgements

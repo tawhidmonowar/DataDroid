@@ -202,4 +202,4 @@ icon paths (Apache 2.0). See [NOTICE](NOTICE) for details and sources.
 **Tawhid Monowar** - *Computer Science & Engineering Student* <br>
 [LinkedIn](https://www.linkedin.com/in/tawhidmonowar) | [Portfolio](https://tawhidmonowar.github.io)  | [Email](mailto:tawhidmonowar@duck.com)
 
-The contest essay is in [ESSAY.md](ESSAY.md).
+The contest essay is in [ESSAY.md](docs/ESSAY.md).
