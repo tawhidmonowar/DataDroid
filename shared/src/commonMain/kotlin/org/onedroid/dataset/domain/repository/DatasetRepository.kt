@@ -65,9 +65,14 @@ interface DatasetRepository {
 
     /**
      * Writes the dataset as a zip: one folder named after the dataset holding `metadata.json` and a folder
-     * of images per non-empty class.
+     * of images per non-empty class. [unknownImages] go in an `unknown` folder beside it, where training tools
+     * pointed at the dataset folder won't take them for a class.
      */
-    suspend fun exportDataset(datasetId: String, onProgress: ProgressListener = { _, _ -> }): Result<ExportedFile, DataError>
+    suspend fun exportDataset(
+        datasetId: String,
+        unknownImages: List<ImageSource> = emptyList(),
+        onProgress: ProgressListener = { _, _ -> },
+    ): Result<ExportedFile, DataError>
 
     /**
      * Lists the images in a zip without decoding them, so the caller can decide how its folders become

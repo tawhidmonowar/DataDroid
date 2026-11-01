@@ -8,6 +8,8 @@
     <string name="action_create">Create</string>
     <string name="action_delete">Delete</string>
     <string name="action_export">Export</string>
+    <string name="action_capture">Capture</string>
+    <string name="action_undo">Undo</string>
     <string name="action_import_dataset">Import dataset (.zip)</string>
     <string name="action_more_options">More options</string>
     <string name="action_move_to">Move to…</string>
@@ -48,26 +50,30 @@
     <string name="dataset_import_zip">Import class folders from zip</string>
     <string name="class_add">Add a class</string>
     <string name="class_default_name">Class %1$d</string>
-    <string name="class_add_images">Add Image Samples:</string>
-    <plurals name="class_image_count">
-        <item quantity="one">%1$d Image Sample</item>
-        <item quantity="other">%1$d Image Samples</item>
+    <string name="class_empty">No images yet. Capture or upload some.</string>
+    <string name="class_ready">Ready</string>
+    <plurals name="class_more_needed">
+        <item quantity="one">%1$d more recommended</item>
+        <item quantity="other">%1$d more recommended</item>
     </plurals>
-    <string name="class_capture_hint">Tap the button below for one image, or hold it to record</string>
+    <string name="class_see_all">See all</string>
     <string name="class_name_label">Class name</string>
     <string name="class_view_all">View all images</string>
-    <string name="class_folder">Folder</string>
+    <string name="class_folder">Add a folder</string>
     <string name="class_remove_all">Remove all images</string>
     <string name="class_delete">Delete class</string>
     <string name="class_delete_title">Delete “%1$s”?</string>
     <string name="class_delete_message">The class and its %1$s will be permanently deleted.</string>
     <string name="class_clear_title">Remove all images from “%1$s”?</string>
     <string name="class_clear_message">Its %1$s will be permanently deleted. The class stays.</string>
-    <string name="source_camera">Camera</string>
     <string name="source_upload">Upload</string>
     <plurals name="message_images_added">
         <item quantity="one">Added %1$d image</item>
         <item quantity="other">Added %1$d images</item>
+    </plurals>
+    <plurals name="message_images_deleted">
+        <item quantity="one">Deleted %1$d image</item>
+        <item quantity="other">Deleted %1$d images</item>
     </plurals>
     <plurals name="message_images_skipped">
         <item quantity="one">%1$d file wasn’t a readable image and was skipped</item>
@@ -82,24 +88,41 @@
         <item quantity="one">%1$d image didn’t match any class</item>
         <item quantity="other">%1$d images didn’t match any class</item>
     </plurals>
+    <plurals name="message_unknowns_full">
+        <item quantity="one">%1$d unknown image is waiting. File or discard it to keep more.</item>
+        <item quantity="other">%1$d unknown images are waiting. File or discard some to keep more.</item>
+    </plurals>
 
     <!-- Auto-sort -->
     <string name="auto_sort_title">Auto-sort</string>
-    <string name="auto_sort_body">Capture without choosing a class. Each image is saved to the class it looks like.</string>
-    <string name="auto_sort_start">Start</string>
-    <string name="auto_sort_photos">Sort photos from library</string>
     <string name="auto_sort_preparing">Getting ready…</string>
     <string name="auto_sort_preparing_count">Learning your classes: %1$d of %2$d images</string>
     <string name="auto_sort_point">Point the camera at something to see which class it goes to.</string>
     <string name="auto_sort_no_classes">No class has images yet. Capture something: it waits under Unknown so you can start a class with it.</string>
     <string name="auto_sort_similar">%1$s similar</string>
     <string name="auto_sort_closest">Closest: %1$s, %2$s similar</string>
-    <string name="auto_sort_saved">Saved since you opened the camera</string>
     <string name="auto_sort_strictness">Unknown detection</string>
     <string name="auto_sort_strictness_off">Off</string>
     <string name="auto_sort_strictness_hint">Higher is stricter: images must look more like a class to go to it, others wait under Unknown.</string>
     <string name="auto_sort_strictness_off_hint">Every image goes to its closest class.</string>
     <string name="unknown_label">Unknown</string>
+    <string name="unknown_review">Start a class with them, or add them to one</string>
+    <string name="capture_auto">Auto</string>
+    <string name="capture_add_class">New class</string>
+    <string name="capture_saving_to">Saving to %1$s</string>
+    <string name="capture_hint">Tap for one image, hold to record</string>
+    <string name="capture_recent_empty">Images you capture show up here, newest first.</string>
+    <string name="capture_shutter">Capture image</string>
+    <string name="capture_library">Add photos from library</string>
+    <string name="capture_unknowns">Unknown images</string>
+    <string name="capture_auto_settings">Auto-sort settings</string>
+    <string name="capture_auto_settings_body">Auto-sort saves each image to the class it looks most like. Images unlike every class wait under Unknown.</string>
+    <string name="capture_converting">Converting images. Capture resumes when it’s done.</string>
+    <plurals name="capture_saved">
+        <item quantity="one">%1$d image saved</item>
+        <item quantity="other">%1$d images saved</item>
+    </plurals>
+    <string name="viewer_position">%1$d of %2$d</string>
     <plurals name="unknown_title">
         <item quantity="one">%1$d unknown image</item>
         <item quantity="other">%1$d unknown images</item>
@@ -109,21 +132,20 @@
     <string name="unknown_new_class_title">New class for unknown images</string>
     <string name="unknown_add_to">Add to…</string>
     <string name="unknown_discard">Discard</string>
+    <plurals name="unknown_discard_title">
+        <item quantity="one">Discard %1$d unknown image?</item>
+        <item quantity="other">Discard %1$d unknown images?</item>
+    </plurals>
+    <string name="unknown_discard_body">They’ll be deleted from this device. This can’t be undone.</string>
     <string name="unknown_remove">Remove image</string>
 
     <!-- Image viewer and gallery -->
-    <string name="image_delete">Delete image</string>
     <string name="image_load_failed">Couldn’t load the full image</string>
     <string name="gallery_hint">Tap an image to view it. Long-press to select several.</string>
     <plurals name="gallery_selected">
         <item quantity="one">%1$d selected</item>
         <item quantity="other">%1$d selected</item>
     </plurals>
-    <plurals name="gallery_delete_title">
-        <item quantity="one">Delete %1$d image?</item>
-        <item quantity="other">Delete %1$d images?</item>
-    </plurals>
-    <string name="gallery_delete_message">They will be permanently deleted from this dataset.</string>
 
     <!-- Camera -->
     <string name="camera_permission_needed">Camera permission is needed to capture images.</string>
@@ -132,7 +154,6 @@
     <string name="camera_denied">Camera access is off. Enable it for this app in Settings.</string>
     <string name="camera_unavailable">This camera isn’t available on this device.</string>
     <string name="camera_switch">Switch camera</string>
-    <string name="camera_hold_to_record">Tap or Hold to Capture</string>
     <string name="camera_recording">Recording…</string>
 
     <!-- Class balance -->
@@ -144,6 +165,7 @@
     <string name="balance_balanced">Classes look balanced.</string>
     <string name="balance_details">Show class balance</string>
     <string name="balance_status_balanced">Balanced</string>
+    <string name="balance_classes_ready">%1$d of %2$d classes ready</string>
     <string name="balance_status_empty">No images yet</string>
     <plurals name="balance_status_tips">
         <item quantity="one">%1$d tip</item>
@@ -158,6 +180,7 @@
     <string name="export_title">Export dataset</string>
     <string name="export_description">A zip of the dataset folder: one folder of images per class, plus metadata.json.</string>
     <string name="export_empty_classes_note">Classes without images are left out.</string>
+    <string name="export_unknown_note">Unknown images go in their own folder beside the dataset, so training tools don’t take them for a class. Importing the zip puts them back under Unknown.</string>
     <string name="export_button">Export ZIP</string>
 
     <!-- Progress -->

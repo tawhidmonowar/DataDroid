@@ -95,39 +95,15 @@ class ClassMatcher private constructor(
          * out; classes with too few distinct images to measure their spread borrow the typical radius of the
          * others.
          */
-        fun fit(embeddingsByClass: Map<Int, List<FloatArray>>): ClassMatcher {
-            val byClass = embeddingsByClass.filterValues { it.isNotEmpty() }
-            val ids = byClass.keys.toList()
-            val units = ids.map { id -> byClass.getValue(id).map { it.normalized() } }
-            val groups = units.map { duplicateGroups(it) }
-            val weights = groups.map { group ->
-                val sizes = IntArray(group.max() + 1).also { sizes -> group.forEach { sizes[it]++ } }
-                FloatArray(group.size) { 1f / sizes[group[it]] }
-            }
-            val mean = if (ids.size < 2) null else weightedMean(units.flatten(), weights.flatMap { it.asList() })
-            val classes = ids.indices.map { i ->
-                ClassModel(units[i].map { centred(it, mean) }.toTypedArray(), weights[i], groups[i])
-            }
-            val measured = classes.map { it.measureRadius() }
-            val typical = measured.filterNotNull().sorted().let { if (it.isEmpty()) FALLBACK_RADIUS else it[it.size / 2] }
-            val radii = FloatArray(ids.size) { (measured[it] ?: typical).coerceAtLeast(MIN_RADIUS) }
-            return ClassMatcher(ids, mean, classes, radii)
-        }
+        fun fit(embeddingsByClass: Map<Int, List<FloatArray>>): ClassMatcher = Fitter().fit(embeddingsByClass)
 
         /**
          * Labels each of [units] with its group of near-duplicates: the first earlier image it's at least
          * [DUPLICATE_SIMILARITY] like joins that image's group, otherwise it starts one. Labels run 0 until the number of groups.
          */
         fun duplicateGroups(units: List<FloatArray>): IntArray {
-            val leaders = ArrayList<FloatArray>()
-            return IntArray(units.size) { i ->
-                var group = leaders.indexOfFirst { dot(it, units[i]) >= DUPLICATE_SIMILARITY }
-                if (group < 0) {
-                    group = leaders.size
-                    leaders += units[i]
-                }
-                group
-            }
+            val grouper = DuplicateGrouper()
+            return IntArray(units.size) { grouper.add(units[it]) }
         }
 
         /** Maps strictness 1..100 onto the radius margin: lenient accepts up to 1.3 radii, strict 0.9. */
@@ -138,6 +114,93 @@ class ClassMatcher private constructor(
 
         private const val LENIENT_MARGIN = 1.3f
         private const val STRICT_MARGIN = 0.9f
+    }
+
+    /**
+     * Fits matchers to a dataset again and again as it changes, each the same as [ClassMatcher.fit] would give.
+     * Grouping near-duplicates compares every image with every group of its class, most of a fit's cost, so each
+     * class's groups are kept between fits. A class that only gained images at the end (as the camera adds them)
+     * has just those grouped; any other change regroups it. Classes are recognised by the identity of their
+     * embedding arrays, so pass the same arrays each time. Not thread-safe.
+     */
+    class Fitter {
+        private var grouped = HashMap<Int, GroupedClass>()
+
+        fun fit(embeddingsByClass: Map<Int, List<FloatArray>>): ClassMatcher {
+            val byClass = embeddingsByClass.filterValues { it.isNotEmpty() }
+            val ids = byClass.keys.toList()
+            val kept = HashMap<Int, GroupedClass>()
+            val classes = ids.map { id ->
+                val embeddings = byClass.getValue(id)
+                val previous = grouped[id]
+                val current = if (previous != null && previous.extend(embeddings)) previous else GroupedClass(embeddings)
+                kept[id] = current
+                current
+            }
+            grouped = kept
+            val groups = classes.map { it.groups() }
+            val weights = groups.map { group ->
+                val sizes = IntArray(group.max() + 1).also { sizes -> group.forEach { sizes[it]++ } }
+                FloatArray(group.size) { 1f / sizes[group[it]] }
+            }
+            val mean = if (ids.size < 2) null else weightedMean(classes.map { it.units }, weights)
+            val models = ids.indices.map { i ->
+                ClassModel(Array(classes[i].units.size) { centred(classes[i].units[it], mean) }, weights[i], groups[i])
+            }
+            val measured = models.map { it.measureRadius() }
+            val typical = measured.filterNotNull().sorted().let { if (it.isEmpty()) FALLBACK_RADIUS else it[it.size / 2] }
+            val radii = FloatArray(ids.size) { (measured[it] ?: typical).coerceAtLeast(MIN_RADIUS) }
+            return ClassMatcher(ids, mean, models, radii)
+        }
+    }
+}
+
+/** Groups unit vectors into near-duplicates as they're added, as [ClassMatcher.duplicateGroups] describes. */
+private class DuplicateGrouper {
+    private val leaders = ArrayList<FloatArray>()
+
+    /** The group [unit] joins. */
+    fun add(unit: FloatArray): Int {
+        val group = leaders.indexOfFirst { dot(it, unit) >= ClassMatcher.DUPLICATE_SIMILARITY }
+        if (group >= 0) return group
+        leaders += unit
+        return leaders.size - 1
+    }
+}
+
+/** One class's embeddings as unit vectors, with their near-duplicate groups; images can be added at the end. */
+private class GroupedClass(embeddings: List<FloatArray>) {
+    /** The arrays the class was built from, to recognise them next time. */
+    private val sources = ArrayList<FloatArray>(embeddings.size)
+    val units = ArrayList<FloatArray>(embeddings.size)
+    private val grouper = DuplicateGrouper()
+    private var labels = IntArray(embeddings.size.coerceAtLeast(INITIAL_CAPACITY))
+
+    init {
+        embeddings.forEach(::add)
+    }
+
+    /** Group labels, a copy so later additions don't change a fitted matcher's. */
+    fun groups(): IntArray = labels.copyOf(units.size)
+
+    /** Adds [embeddings] past the ones already here, or returns false if it isn't this class plus new images. */
+    fun extend(embeddings: List<FloatArray>): Boolean {
+        if (embeddings.size < sources.size) return false
+        for (i in sources.indices) if (embeddings[i] !== sources[i]) return false
+        for (i in sources.size until embeddings.size) add(embeddings[i])
+        return true
+    }
+
+    private fun add(embedding: FloatArray) {
+        val unit = embedding.normalized()
+        if (units.size == labels.size) labels = labels.copyOf(labels.size * 2)
+        labels[units.size] = grouper.add(unit)
+        sources += embedding
+        units += unit
+    }
+
+    private companion object {
+        const val INITIAL_CAPACITY = 16
     }
 }
 
@@ -162,12 +225,18 @@ private class ClassModel(
      * leaving out [excludedGroup]'s images.
      */
     private fun score(query: FloatArray, centroid: FloatArray, excludedGroup: Int): Float {
-        val similarities = FloatArray(members.size) { if (groups[it] == excludedGroup) -Float.MAX_VALUE else dot(query, members[it]) }
-        val nearest = similarities.indices.sortedByDescending { similarities[it] }
+        val similarities = FloatArray(members.size)
+        val nearest = NearestFirst(similarities, members.size)
+        for (m in members.indices) {
+            if (groups[m] == excludedGroup) continue
+            similarities[m] = dot(query, members[m])
+            nearest.offer(m)
+        }
+        nearest.heapify()
         var total = 0f
         var taken = 0f
-        for (m in nearest) {
-            if (groups[m] == excludedGroup) break
+        while (nearest.isNotEmpty()) {
+            val m = nearest.pop()
             val take = min(weights[m], ClassMatcher.NEIGHBOURS - taken)
             total += take * similarities[m]
             taken += take
@@ -204,6 +273,50 @@ private class ClassModel(
     }
 }
 
+/**
+ * Indices of [similarities] from most to least similar, ties in index order (as a stable sort gives them),
+ * without sorting all of them: a score only needs the first few. [offer] the indices, [heapify], then [pop].
+ */
+private class NearestFirst(private val similarities: FloatArray, capacity: Int) {
+    private val heap = IntArray(capacity)
+    private var size = 0
+
+    fun offer(index: Int) {
+        heap[size++] = index
+    }
+
+    fun heapify() {
+        for (i in size / 2 - 1 downTo 0) siftDown(i)
+    }
+
+    fun isNotEmpty(): Boolean = size > 0
+
+    fun pop(): Int {
+        val top = heap[0]
+        heap[0] = heap[--size]
+        siftDown(0)
+        return top
+    }
+
+    private fun siftDown(start: Int) {
+        var i = start
+        while (true) {
+            val left = 2 * i + 1
+            if (left >= size) return
+            val right = left + 1
+            val first = if (right < size && comesBefore(heap[right], heap[left])) right else left
+            if (!comesBefore(heap[first], heap[i])) return
+            heap[i] = heap[first].also { heap[first] = heap[i] }
+            i = first
+        }
+    }
+
+    private fun comesBefore(a: Int, b: Int): Boolean {
+        val order = similarities[a].compareTo(similarities[b])
+        return order > 0 || (order == 0 && a < b)
+    }
+}
+
 private fun dot(a: FloatArray, b: FloatArray): Float {
     var sum = 0f
     for (i in a.indices) sum += a[i] * b[i]
@@ -219,9 +332,17 @@ internal fun FloatArray.normalized(): FloatArray {
 private fun centred(unit: FloatArray, mean: FloatArray?): FloatArray =
     if (mean == null) unit else FloatArray(unit.size) { unit[it] - mean[it] }.normalized()
 
-private fun weightedMean(vectors: List<FloatArray>, weights: List<Float>): FloatArray {
-    val sum = FloatArray(vectors.first().size)
-    for (v in vectors.indices) for (i in sum.indices) sum[i] += weights[v] * vectors[v][i]
-    val total = weights.sum()
+/** The mean of every class's [vectors], each weighted by its entry in [weights]. */
+private fun weightedMean(vectors: List<List<FloatArray>>, weights: List<FloatArray>): FloatArray {
+    val sum = FloatArray(vectors.first().first().size)
+    var total = 0f
+    for (c in vectors.indices) {
+        for (v in vectors[c].indices) {
+            val weight = weights[c][v]
+            val vector = vectors[c][v]
+            for (i in sum.indices) sum[i] += weight * vector[i]
+            total += weight
+        }
+    }
     return FloatArray(sum.size) { sum[it] / total }
 }

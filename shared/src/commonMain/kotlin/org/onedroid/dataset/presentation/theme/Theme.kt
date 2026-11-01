@@ -59,6 +59,15 @@ private val ClassColors = listOf(
 
 fun classColor(index: Int): Color = ClassColors[index % ClassColors.size]
 
+/** The camera screen is dark whatever the system theme, like a camera app, so the viewfinder stands out. */
+@Composable
+fun CameraTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = DarkColors.copy(background = Color.Black, surface = Color(0xFF1B1B1D), surfaceContainerLow = Color(0xFF1B1B1D)),
+        content = content,
+    )
+}
+
 @Composable
 fun DataDroidTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors, content = content)

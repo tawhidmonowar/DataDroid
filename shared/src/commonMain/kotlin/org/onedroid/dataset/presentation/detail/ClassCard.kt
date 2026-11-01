@@ -1,6 +1,5 @@
 package org.onedroid.dataset.presentation.detail
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,13 +17,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,8 +40,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -50,78 +52,112 @@ import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import org.onedroid.dataset.domain.usecase.MAX_NAME_LENGTH
+import org.onedroid.dataset.domain.usecase.RECOMMENDED_IMAGES_PER_CLASS
 import org.onedroid.dataset.presentation.components.AppIcons
 import org.onedroid.dataset.presentation.components.DatasetThumbnail
 import org.onedroid.dataset.presentation.theme.classColor
 import org.onedroid.dataset.resources.Res
+import org.onedroid.dataset.resources.action_capture
 import org.onedroid.dataset.resources.action_options_for
 import org.onedroid.dataset.resources.action_rename_item
 import org.onedroid.dataset.resources.action_save_name
-import org.onedroid.dataset.resources.class_add_images
-import org.onedroid.dataset.resources.class_capture_hint
 import org.onedroid.dataset.resources.class_delete
+import org.onedroid.dataset.resources.class_empty
 import org.onedroid.dataset.resources.class_folder
-import org.onedroid.dataset.resources.class_image_count
+import org.onedroid.dataset.resources.class_more_needed
 import org.onedroid.dataset.resources.class_name_label
+import org.onedroid.dataset.resources.class_ready
 import org.onedroid.dataset.resources.class_remove_all
+import org.onedroid.dataset.resources.class_see_all
 import org.onedroid.dataset.resources.class_view_all
-import org.onedroid.dataset.resources.source_camera
+import org.onedroid.dataset.resources.images_count
 import org.onedroid.dataset.resources.source_upload
 import org.onedroid.dataset.resources.view_image
 
+/**
+ * A class: its name, how close it is to the recommended number of images, its newest images, and ways to
+ * add more. Tapping the card anywhere else opens all its images, as "See all" does.
+ */
 @Composable
 fun ClassCard(
     datasetId: String,
     imageClass: ClassUi,
     enabled: Boolean,
     onRename: (String) -> Unit,
-    onCamera: () -> Unit,
+    onCapture: () -> Unit,
     onUpload: () -> Unit,
     onAddFolder: () -> Unit,
     onViewAll: () -> Unit,
     onClear: () -> Unit,
     onDelete: () -> Unit,
     onOpenImage: (Long) -> Unit,
-    camera: (@Composable () -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    ElevatedCard(modifier.fillMaxWidth()) {
+    val count = imageClass.imageIds.size
+    // An empty class has nothing to open, but shouldn't look disabled for it.
+    val colors = CardDefaults.elevatedCardColors().let { it.copy(disabledContainerColor = it.containerColor, disabledContentColor = it.contentColor) }
+    ElevatedCard(onClick = onViewAll, enabled = count > 0, colors = colors, modifier = modifier.fillMaxWidth()) {
         ClassHeader(imageClass, enabled, onRename, onAddFolder, onViewAll, onClear, onDelete)
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        // Grows smoothly when the camera opens or closes instead of jumping.
-        Column(Modifier.animateContentSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            val count = imageClass.imageIds.size
-            Text(
-                if (count == 0) stringResource(Res.string.class_add_images) else pluralStringResource(Res.plurals.class_image_count, count, count),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            if (camera != null) {
-                // Reserve the strip's slot even while empty, so the first capture doesn't push the
-                // camera and the Hold to Record button down under the user's finger.
-                Box(Modifier.fillMaxWidth().height(THUMBNAIL_SIZE.dp), contentAlignment = Alignment.CenterStart) {
-                    if (count > 0) {
-                        ImageStrip(datasetId, imageClass.imageIds, Modifier.fillMaxWidth(), onOpenImage)
-                    } else {
-                        Text(
-                            stringResource(Res.string.class_capture_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                camera()
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Progress(count, classColor(imageClass.colorIndex))
+            if (count > 0) {
+                ImageStrip(datasetId, imageClass.imageIds, onOpenImage, onViewAll)
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SourceButton(AppIcons.Camera, stringResource(Res.string.source_camera), enabled, onCamera)
-                    SourceButton(AppIcons.Upload, stringResource(Res.string.source_upload), enabled, onUpload)
-                    if (count > 0) {
-                        ImageStrip(datasetId, imageClass.imageIds, Modifier.weight(1f), onOpenImage)
-                    } else {
-                        SourceButton(AppIcons.Folder, stringResource(Res.string.class_folder), enabled, onAddFolder)
-                    }
+                Text(
+                    stringResource(Res.string.class_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = onCapture, enabled = enabled) {
+                    Icon(AppIcons.Camera, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(stringResource(Res.string.action_capture), modifier = Modifier.padding(start = 8.dp))
+                }
+                OutlinedButton(onClick = onUpload, enabled = enabled) {
+                    Icon(AppIcons.Upload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(stringResource(Res.string.source_upload), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }
+    }
+}
+
+/** How far the class is towards the recommended number of images. */
+@Composable
+private fun Progress(count: Int, color: Color) {
+    val ready = count >= RECOMMENDED_IMAGES_PER_CLASS
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                pluralStringResource(Res.plurals.images_count, count, count),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            if (ready) {
+                Icon(AppIcons.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Text(
+                    stringResource(Res.string.class_ready),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 4.dp),
+                )
+            } else {
+                val missing = RECOMMENDED_IMAGES_PER_CLASS - count
+                Text(
+                    pluralStringResource(Res.plurals.class_more_needed, missing, missing),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        LinearProgressIndicator(
+            progress = { (count.toFloat() / RECOMMENDED_IMAGES_PER_CLASS).coerceAtMost(1f) },
+            color = color,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            drawStopIndicator = {},
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -139,7 +175,7 @@ private fun ClassHeader(
     var menuOpen by remember { mutableStateOf(false) }
 
     Row(
-        Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(12.dp).clip(CircleShape).background(classColor(imageClass.colorIndex)))
@@ -150,7 +186,7 @@ private fun ClassHeader(
                     if (name.trim() != imageClass.name) onRename(name)
                     editing = false
                 },
-                modifier = Modifier.weight(1f).padding(start = 12.dp),
+                modifier = Modifier.weight(1f).padding(start = 12.dp, top = 8.dp),
             )
         } else {
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
@@ -166,6 +202,7 @@ private fun ClassHeader(
                         AppIcons.Edit,
                         contentDescription = stringResource(Res.string.action_rename_item, imageClass.name),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
@@ -226,28 +263,11 @@ private fun ClassNameField(initial: String, onDone: (String) -> Unit, modifier: 
     )
 }
 
-@Composable
-private fun SourceButton(icon: ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(8.dp),
-        color = colors.secondaryContainer,
-        contentColor = if (enabled) colors.onSecondaryContainer else colors.onSurface.copy(alpha = 0.38f),
-        modifier = Modifier.size(width = 76.dp, height = 64.dp),
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Icon(icon, contentDescription = null)
-            Text(label, style = MaterialTheme.typography.labelMedium)
-        }
-    }
-}
+private const val THUMBNAIL_SIZE = 64
 
-private const val THUMBNAIL_SIZE = 56
-
+/** The newest images first, so fresh captures are in view, ending in a tile that opens them all. */
 @Composable
-private fun ImageStrip(datasetId: String, imageIds: List<Long>, modifier: Modifier = Modifier, onClick: (Long) -> Unit) {
+private fun ImageStrip(datasetId: String, imageIds: List<Long>, onClick: (Long) -> Unit, onViewAll: () -> Unit) {
     val listState = rememberLazyListState()
     val newestId = imageIds.lastOrNull()
     // LazyRow keeps the previously first item anchored when new items are prepended, which hides
@@ -256,17 +276,34 @@ private fun ImageStrip(datasetId: String, imageIds: List<Long>, modifier: Modifi
         if (newestId != null && listState.firstVisibleItemIndex <= 1) listState.animateScrollToItem(0)
     }
     val viewLabel = stringResource(Res.string.view_image)
-    // Newest first, so fresh captures are visible without scrolling.
-    LazyRow(modifier.height(THUMBNAIL_SIZE.dp), state = listState, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        items(imageIds.asReversed(), key = { it }) { imageId ->
+    LazyRow(Modifier.fillMaxWidth().height(THUMBNAIL_SIZE.dp), state = listState, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        items(imageIds.asReversed().take(STRIP_LIMIT), key = { it }) { imageId ->
             DatasetThumbnail(
                 datasetId = datasetId,
                 imageId = imageId,
                 size = THUMBNAIL_SIZE.dp,
+                shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .animateItem()
                     .clickable(onClickLabel = viewLabel, role = Role.Image) { onClick(imageId) },
             )
         }
+        item(key = "all") {
+            Surface(
+                onClick = onViewAll,
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(THUMBNAIL_SIZE.dp),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Icon(AppIcons.Grid, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text(stringResource(Res.string.class_see_all), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
     }
 }
+
+/** Thumbnails shown before the "see all" tile; the gallery has the rest. */
+private const val STRIP_LIMIT = 30

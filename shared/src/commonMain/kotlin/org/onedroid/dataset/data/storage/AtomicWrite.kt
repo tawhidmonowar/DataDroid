@@ -12,3 +12,9 @@ internal fun FileSystem.writeAtomically(target: Path, bytes: ByteArray) {
     sink(temp).buffered().use { it.write(bytes) }
     atomicMove(temp, target)
 }
+
+/** Whether this failure, or one that caused it, is the disk being full. */
+internal fun Throwable.isDiskFull(): Boolean {
+    val text = generateSequence(this) { it.cause }.mapNotNull { it.message }.joinToString(" ")
+    return "ENOSPC" in text || "No space left" in text
+}

@@ -32,18 +32,22 @@ Everything runs on the device, including the auto-sort model, so no image ever l
 
 - **Datasets**: create, rename, delete; each starts with one class.
 - **Classes**: add, rename inline, clear, delete. Class names are unique per dataset.
-- **Images**: capture with the camera (tap for one image, hold to record ~5 frames/s, 640×640 square), pick from the photo
-  library, add a folder to a class, or import a folder or zip of class folders (merged by class name).
+- **Capture**: one full-screen camera for the whole dataset. Chips under the square viewfinder choose where
+  images go: **Auto**, or one class. Tap the shutter for one image, hold it to record (~5 frames/s, 640×640
+  square, what the viewfinder shows). Photos from the library go the same way. Images can also be added
+  from a folder per class, or imported as a folder or zip of class folders (merged by class name).
   Originals are kept unchanged; files that aren't decodable images are skipped.
 - **Auto-sort**: capture without choosing a class. An on-device MobileNetV3-Small model embeds each image and
-  saves it to the class whose images it's most like. Images unlike every class wait under **Unknown**, where
-  they can start a new class, join an existing one, or be discarded. Photos from the library can be sorted
-  the same way. "Unknown detection" sets how alike an image must be to a class (0 turns it off).
-  Embeddings are cached per dataset in `embeddings.bin`, so each image is only analysed once.
-- **Review**: thumbnail strip per class, full image viewer, and a per-class gallery with multi-select to
-  move or delete images.
-- **Class balance**: image counts, per-class bars, and warnings for empty, small (<20 images) or
-  imbalanced (largest ≥ 1.5× smallest) classes.
+  saves it to the class whose images it's most like, with a live label over the viewfinder. Images unlike
+  every class wait under **Unknown** (kept on disk, so closing the camera or the app loses none), where they
+  can start a new class, join an existing one, or be discarded. "Unknown detection" sets how alike an image
+  must be to a class (0 turns it off). Embeddings are cached per dataset in `embeddings.bin`, so each image is
+  only analysed once.
+- **Review**: per class, a progress bar towards 20 images and the newest thumbnails; a gallery with
+  multi-select to move or delete; and a full-screen viewer to swipe through images, zoom, move or delete.
+  Deletes can be undone for a few seconds.
+- **Class balance**: how many classes are ready, image counts, per-class bars, and warnings for empty, small
+  (<20 images) or imbalanced (largest ≥ 1.5× smallest) classes.
 - **Image settings**: store images as captured, or resize (fit or square) and convert to JPEG, PNG or WebP,
   as an app default or per dataset.
 - **Export**: a zip of the dataset folder, shared through the system share sheet:
@@ -54,9 +58,13 @@ Everything runs on the device, including the auto-sort model, so no image ever l
   ├── cat/cat_0001.jpg
   ├── dog/dog_0001.png
   └── bird/bird_0001.jpg
+  unknown/unknown_0001.jpg
   ```
 
-  Empty classes are left out. The same zips (or any zip of class folders) can be imported as a new dataset.
+  Empty classes are left out. Unknown images, if any, go in an `unknown` folder beside the dataset folder,
+  not inside it, so a training tool pointed at `Animal_Dataset/` doesn't take them for a class;
+  `metadata.json` names the folder (`"unknownFolder": "unknown"`). The same zips (or any zip of class
+  folders) can be imported as a new dataset, and their unknown images go back under **Unknown**.
 
 ## Requirements
 
@@ -130,20 +138,21 @@ instead of the camera. Drag images onto the simulator window to add them to its 
 A two-minute tour, on either platform:
 
 1. **Create a dataset.** On the home screen, tap **New dataset** and give it a name, such as "Desk objects".
-2. **Fill two classes.** Rename `Class 1` to `mug`, then tap **Add a class** and name it `pen`. Under
-   **Add Image Samples**, choose **Camera** and tap the shutter for one image, or hold it to record about
-   5 frames a second. Aim for 20 or more images per class. **Upload** adds photos from the library instead.
-3. **Watch the class balance.** Tap the **Class balance** card to see per-class counts and warnings for
-   empty, small or imbalanced classes.
-4. **Auto-sort.** In the **Auto-sort** card, tap **Start** and point the camera at a mug or a pen. The live
-   label shows the closest class and how similar it is. Captured images go straight to that class. Capture
-   something new, like a phone: it waits under **Unknown**, where **New class** turns it into a third class.
-   **Sort photos from library** does the same for existing photos.
-5. **Review.** Tap **View all images** on a class. Long-press to select several images, then **Move to…** another
-   class or **Delete** them.
+2. **Fill two classes.** Rename `Class 1` to `mug` and tap **Capture**. The camera starts on `mug`: tap
+   the shutter for one image, or hold it to record about 5 frames a second. Tap **New class** in the chip row,
+   name it `pen`, and capture some pens. Aim for 20 or more images per class; each class's progress bar fills
+   as you go. The gallery button beside the shutter adds photos from the library instead.
+3. **Auto-sort.** Tap the **Auto** chip and point the camera at a mug or a pen. The label over the viewfinder
+   shows the closest class and how similar it is, and captures go straight to that class. Capture something
+   new, like a phone: it waits under **Unknown** (the badge beside the shutter), where **New class** turns it
+   into a third class. Photos from the library are sorted the same way while **Auto** is on.
+4. **Watch the class balance.** Back on the dataset, the line under the title says how many classes are
+   ready. Tap it for per-class counts and warnings about empty, small or imbalanced classes.
+5. **Review.** Tap a thumbnail to view images full screen: swipe between them, pinch to zoom, and **Move to…**
+   or **Delete** (with **Undo**). **See all** opens the gallery; long-press to select several images.
 6. **Change image settings.** In **Settings**, choose a size (Original, Fit or Square) and a format (JPEG,
    PNG or WebP) for new datasets. Use **Image settings** in a dataset's menu to change it for one dataset.
-7. **Export.** Tap **Export ZIP** and share the zip through the system share sheet. It holds one folder per
+7. **Export.** Tap **Export**, then **Export ZIP**, and share the zip through the system share sheet. It holds one folder per
    class plus `metadata.json`.
 8. **Import.** Back on the home screen, use **Import dataset (.zip)** on the zip you just exported to get it
    back as a new dataset.

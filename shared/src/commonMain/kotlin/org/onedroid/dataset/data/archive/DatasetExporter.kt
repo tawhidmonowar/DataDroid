@@ -1,5 +1,6 @@
 package org.onedroid.dataset.data.archive
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.io.buffered
 import kotlinx.io.files.FileSystem
 import kotlinx.io.files.Path
@@ -7,6 +8,8 @@ import kotlinx.serialization.json.Json
 import org.onedroid.dataset.data.storage.DatasetMetadata
 import org.onedroid.dataset.data.storage.DatasetRecord
 import org.onedroid.dataset.data.storage.ImageRecord
+import org.onedroid.dataset.data.image.ImageFormat
+import org.onedroid.dataset.domain.model.ImageSource
 import org.onedroid.dataset.domain.usecase.ExportNaming
 import org.onedroid.dataset.domain.usecase.ExportNaming.METADATA_FILE
 
@@ -16,26 +19,31 @@ import org.onedroid.dataset.domain.usecase.ExportNaming.METADATA_FILE
  * Animal_Dataset/metadata.json
  * Animal_Dataset/cat/cat_0001.jpg
  * Animal_Dataset/dog/dog_0001.png
+ * unknown/unknown_0001.jpg
  * ```
- * Empty classes are left out, since training tools reject class folders without images.
+ * Empty classes are left out, since training tools reject class folders without images. Unknown images go
+ * beside the dataset folder rather than in it, since training tools take every folder in it for a class.
  */
 internal class DatasetExporter(private val fileSystem: FileSystem) {
     private val json = Json { prettyPrint = true }
 
     /**
-     * Streams [record]'s images, read with [readImage], into [target]. Images whose file has gone missing
-     * are skipped. The zip is written next to [target] and moved into place once complete.
+     * Streams [record]'s images, read with [readImage], and [unknownImages] into [target]. Images whose file
+     * has gone missing, or unknown images that can't be read or aren't images, are skipped. The zip is written
+     * next to [target] and moved into place once complete.
      */
-    fun export(
+    suspend fun export(
         record: DatasetRecord,
         target: Path,
         readImage: (ImageRecord) -> ByteArray?,
+        unknownImages: List<ImageSource>,
         onProgress: (done: Int, total: Int) -> Unit,
     ) {
         val root = ExportNaming.rootFolder(record.name)
         val classes = record.classes.filter { it.images.isNotEmpty() }
         val folders = ExportNaming.classFolders(classes.map { it.name })
-        val total = classes.sumOf { it.images.size }
+        val unknownFolder = ExportNaming.unknownFolder(root)
+        val total = classes.sumOf { it.images.size } + unknownImages.size
 
         val temp = Path(requireNotNull(target.parent), "${target.name}.tmp")
         try {
@@ -57,10 +65,32 @@ internal class DatasetExporter(private val fileSystem: FileSystem) {
                         onProgress(exported, total)
                     }
                 }
+                val labelled = exported
+                val digits = maxOf(4, unknownImages.size.toString().length)
+                var unknownCount = 0
+                unknownImages.forEach { source ->
+                    val bytes = try {
+                        source.read()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        null
+                    }
+                    val extension = bytes?.let { ImageFormat.extensionOf(it) }
+                    if (bytes != null && extension != null) {
+                        unknownCount++
+                        val number = unknownCount.toString().padStart(digits, '0')
+                        zip.add("$unknownFolder/${ExportNaming.UNKNOWN_FOLDER}_$number.$extension", bytes)
+                    }
+                    exported++
+                    onProgress(exported, total)
+                }
                 val metadata = DatasetMetadata(
                     name = record.name,
                     classes = folders.filterIndexed { index, _ -> exportedPerClass[index] > 0 },
-                    imageCount = exported,
+                    imageCount = labelled,
+                    unknownFolder = unknownFolder.takeIf { unknownCount > 0 },
+                    unknownImageCount = unknownCount,
                 )
                 zip.add("$root/$METADATA_FILE", json.encodeToString(DatasetMetadata.serializer(), metadata).encodeToByteArray())
                 zip.finish()

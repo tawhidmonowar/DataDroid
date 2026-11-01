@@ -39,11 +39,17 @@ fun interface ImageSource {
 /** An image found in a picked folder or zip; [folders] is its directory path below the picked root. */
 class LabeledImage(val folders: List<String>, val name: String, val source: ImageSource)
 
-/** A zip's images, unread, and the dataset name it suggests (from its `metadata.json` or wrapper folder). */
-class ArchiveContents(val name: String?, val images: List<LabeledImage>)
+/**
+ * A zip's images, unread, and the dataset name it suggests (from its `metadata.json` or wrapper folder).
+ * [unknownImages] are the images a DataDroid export kept apart as unknown, which belong to no class.
+ */
+class ArchiveContents(val name: String?, val images: List<LabeledImage>, val unknownImages: List<ImageSource> = emptyList())
 
 /** Outcome of adding a batch of images: images that couldn't be decoded are [skipped]. */
 data class ImportResult(val added: Int, val skipped: Int)
 
 /** A file written for the user to share or save. */
 data class ExportedFile(val path: String, val mimeType: String)
+
+/** An image auto-sort couldn't place in any class, waiting for the user; [preview] is a small JPEG of it. */
+class UnknownImage(val id: Long, val preview: ByteArray)

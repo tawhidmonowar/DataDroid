@@ -105,6 +105,42 @@ class ClassMatcherTest {
         assertEquals(7, single.match(at(3.0), ClassMatcher.DEFAULT_STRICTNESS).classId)
     }
 
+    @Test
+    fun refittingAsTheDatasetChangesMatchesAFreshFit() {
+        val classes = mutableMapOf(
+            1 to (List(10) { photo(cat) } + burst(cat, 8)).toMutableList(),
+            2 to List(14) { photo(dog) }.toMutableList(),
+            3 to List(9) { photo(direction()) }.toMutableList(),
+        )
+        val queries = List(20) { photo(cat, noise = 0.9f) } + List(20) { photo(dog, noise = 0.9f) } + List(10) { direction() }
+        val fitter = ClassMatcher.Fitter()
+
+        fun assertSameAsFreshFit() {
+            val refitted = fitter.fit(classes)
+            val fresh = ClassMatcher.fit(classes)
+            for (query in queries) {
+                for (strictness in listOf(0, 50, 100)) assertEquals(fresh.match(query, strictness), refitted.match(query, strictness))
+            }
+        }
+
+        assertSameAsFreshFit()
+        // Captures land at the end of a class, a burst at a time.
+        classes.getValue(1) += burst(cat, 5)
+        classes.getValue(2) += photo(dog)
+        assertSameAsFreshFit()
+        // Deleting or moving images changes the middle of a class.
+        val moved = classes.getValue(2).removeAt(3)
+        classes.getValue(3) += moved
+        assertSameAsFreshFit()
+        // Classes come and go.
+        classes[4] = mutableListOf(photo(direction()))
+        classes.remove(3)
+        assertSameAsFreshFit()
+        // New arrays for the same images, as after the cache is reloaded.
+        classes[1] = classes.getValue(1).map { it.copyOf() }.toMutableList()
+        assertSameAsFreshFit()
+    }
+
     private fun at(degrees: Double): FloatArray {
         val radians = degrees * kotlin.math.PI / 180
         return floatArrayOf(cos(radians).toFloat(), sin(radians).toFloat(), 0f)
