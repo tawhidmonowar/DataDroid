@@ -18,8 +18,12 @@ interface ImageSorter {
         onProgress: ProgressListener = { _, _ -> },
     ): Result<ClassMatcher, DataError.Sorting>
 
-    /** The embedding [ClassMatcher] compares, for encoded image bytes; null if they aren't a decodable image. */
-    suspend fun embed(image: ByteArray): Result<FloatArray?, DataError.Sorting>
+    /**
+     * The embedding [ClassMatcher] compares, for encoded image bytes; null if they aren't a decodable image.
+     * [saving] says these exact bytes are about to be added to a dataset, so the embedding is kept for
+     * [matcherFor] rather than worked out again from the stored image.
+     */
+    suspend fun embed(image: ByteArray, saving: Boolean = false): Result<FloatArray?, DataError.Sorting>
 
     /** A small square JPEG to show an image that isn't saved yet; null if it can't be decoded. */
     suspend fun preview(image: ByteArray): ByteArray?

@@ -10,6 +10,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import org.onedroid.dataset.presentation.capture.CaptureRoot
 import org.onedroid.dataset.presentation.datasets.DatasetListRoot
 import org.onedroid.dataset.presentation.detail.DatasetDetailRoot
 import org.onedroid.dataset.presentation.settings.SettingsRoot
@@ -40,12 +41,24 @@ fun AppNavHost() {
             )
         }
         composable<DatasetDetailRoute> { entry ->
+            val datasetId = entry.toRoute<DatasetDetailRoute>().datasetId
             DatasetDetailRoot(
-                datasetId = entry.toRoute<DatasetDetailRoute>().datasetId,
+                datasetId = datasetId,
                 onBack = {
                     // Ignore repeated back taps while the screen is already leaving.
                     if (navController.currentBackStackEntry == entry) navController.navigateUp()
                 },
+                onOpenCapture = { classId ->
+                    if (navController.currentBackStackEntry == entry) navController.navigate(CaptureRoute(datasetId, classId))
+                },
+            )
+        }
+        composable<CaptureRoute> { entry ->
+            val route = entry.toRoute<CaptureRoute>()
+            CaptureRoot(
+                datasetId = route.datasetId,
+                classId = route.classId,
+                onBack = { if (navController.currentBackStackEntry == entry) navController.navigateUp() },
             )
         }
     }

@@ -149,6 +149,30 @@ class FileDatasetRepositoryTest {
     }
 
     @Test
+    fun unknownImagesExportBesideTheDatasetAndImportApart() = runTest {
+        val id = repository.createDataset("Animal Dataset").value()
+        val cat = dataset(id).classes.single().id
+        repository.addImages(id, cat, listOf(source(fakeJpeg("c1")))).value()
+        // The last "unknown" isn't an image, so it's left out.
+        val unknowns = listOf(source(fakeJpeg("u1")), source(fakePng("u2")), source("junk".encodeToByteArray()))
+
+        val zip = SystemFileSystem.source(Path(repository.exportDataset(id, unknowns).value().path)).buffered().use { it.readByteArray() }
+        val entries = ZipReader.read(zip)
+        assertEquals(
+            setOf("Animal_Dataset/Class_1/Class_1_0001.jpg", "Animal_Dataset/metadata.json", "unknown/unknown_0001.jpg", "unknown/unknown_0002.png"),
+            entries.keys,
+        )
+        val metadata = Json.decodeFromString(DatasetMetadata.serializer(), entries.getValue("Animal_Dataset/metadata.json").decodeToString())
+        assertEquals(DatasetMetadata("Animal Dataset", listOf("Class_1"), 1, unknownFolder = "unknown", unknownImageCount = 2), metadata)
+
+        // Importing keeps them out of the classes.
+        val contents = repository.readArchive(zip).value()
+        assertEquals("Animal Dataset", contents.name)
+        assertEquals(listOf("Class_1_0001.jpg"), contents.images.map { it.name })
+        assertEquals(listOf("u1", "u2"), contents.unknownImages.map { it.read().decodeToString().drop(4) })
+    }
+
+    @Test
     fun exportingAnEmptyDatasetFails() = runTest {
         val id = repository.createDataset("Empty").value()
         assertEquals(DataError.Archive.EMPTY_DATASET, (repository.exportDataset(id) as Result.Error).error)

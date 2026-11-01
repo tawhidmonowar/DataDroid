@@ -37,5 +37,12 @@ object ExportNaming {
         }
     }
 
+    /**
+     * The folder for unknown images, beside the dataset's [root] folder; renamed in the rare case the dataset
+     * folder itself is called that.
+     */
+    fun unknownFolder(root: String): String = if (root.equals(UNKNOWN_FOLDER, ignoreCase = true)) "${UNKNOWN_FOLDER}_images" else UNKNOWN_FOLDER
+
     const val METADATA_FILE = "metadata.json"
+    const val UNKNOWN_FOLDER = "unknown"
 }

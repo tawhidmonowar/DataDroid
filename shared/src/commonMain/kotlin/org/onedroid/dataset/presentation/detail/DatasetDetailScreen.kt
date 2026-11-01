@@ -1,6 +1,7 @@
 package org.onedroid.dataset.presentation.detail
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -10,33 +11,41 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,57 +61,61 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
-import org.onedroid.dataset.presentation.components.ObserveAsEvents
-import org.onedroid.dataset.domain.model.DatasetClass
-import org.onedroid.dataset.domain.usecase.computeClassBalance
 import org.onedroid.dataset.core.platform.picker.rememberArchivePicker
 import org.onedroid.dataset.core.platform.picker.rememberFileSharer
 import org.onedroid.dataset.core.platform.picker.rememberFolderPicker
 import org.onedroid.dataset.core.platform.picker.rememberImagePicker
+import org.onedroid.dataset.domain.model.DatasetClass
+import org.onedroid.dataset.domain.usecase.computeClassBalance
 import org.onedroid.dataset.presentation.components.AppIcons
 import org.onedroid.dataset.presentation.components.ConfirmDialog
 import org.onedroid.dataset.presentation.components.ImportPreviewDialog
 import org.onedroid.dataset.presentation.components.NameDialog
+import org.onedroid.dataset.presentation.components.ObserveAsEvents
 import org.onedroid.dataset.presentation.components.ProgressBanner
+import org.onedroid.dataset.presentation.components.UnknownImagesCard
+import org.onedroid.dataset.presentation.components.UnknownImagesSheet
 import org.onedroid.dataset.presentation.components.label
 import org.onedroid.dataset.presentation.theme.DataDroidTheme
 import org.onedroid.dataset.resources.Res
 import org.onedroid.dataset.resources.action_back
+import org.onedroid.dataset.resources.action_capture
 import org.onedroid.dataset.resources.action_delete
+import org.onedroid.dataset.resources.action_export
 import org.onedroid.dataset.resources.action_more_options
 import org.onedroid.dataset.resources.action_remove
 import org.onedroid.dataset.resources.action_rename
+import org.onedroid.dataset.resources.action_undo
+import org.onedroid.dataset.resources.balance_title
 import org.onedroid.dataset.resources.class_add
 import org.onedroid.dataset.resources.class_clear_message
 import org.onedroid.dataset.resources.class_clear_title
 import org.onedroid.dataset.resources.class_delete_message
 import org.onedroid.dataset.resources.class_delete_title
-import org.onedroid.dataset.resources.export_title
-import org.onedroid.dataset.resources.balance_title
 import org.onedroid.dataset.resources.dataset_image_settings
 import org.onedroid.dataset.resources.dataset_import_folder
 import org.onedroid.dataset.resources.dataset_import_zip
 import org.onedroid.dataset.resources.dataset_loading
 import org.onedroid.dataset.resources.dataset_rename
+import org.onedroid.dataset.resources.export_title
 import org.onedroid.dataset.resources.images_count
 
-/** What the next picked images, or picked folder, are for. */
+/** Which picker result is for: a class, or the whole dataset. */
 private sealed interface PickTarget {
     data class Class(val classId: Int) : PickTarget
     data object Dataset : PickTarget
-
-    /** Picked images are sorted into classes automatically. */
-    data object AutoSort : PickTarget
 }
 
 @Composable
 fun DatasetDetailRoot(
     datasetId: String,
     onBack: () -> Unit,
+    onOpenCapture: (classId: Int?) -> Unit,
     viewModel: DatasetDetailViewModel = koinViewModel { parametersOf(datasetId) },
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -115,17 +128,12 @@ fun DatasetDetailRoot(
     // One launcher per picker for the whole screen, so it survives while the system picker is open.
     var pickTarget by remember { mutableStateOf<PickTarget>(PickTarget.Dataset) }
     val pickImages = rememberImagePicker { images ->
-        when (val target = pickTarget) {
-            is PickTarget.Class -> viewModel.onAction(DatasetDetailAction.OnImagesPicked(target.classId, images))
-            PickTarget.AutoSort -> viewModel.onAction(DatasetDetailAction.OnAutoSortImagesPicked(images))
-            PickTarget.Dataset -> Unit
-        }
+        (pickTarget as? PickTarget.Class)?.let { viewModel.onAction(DatasetDetailAction.OnImagesPicked(it.classId, images)) }
     }
     val pickFolder = rememberFolderPicker { folder ->
         when (val target = pickTarget) {
             is PickTarget.Class -> viewModel.onAction(DatasetDetailAction.OnClassFolderPicked(target.classId, folder))
             PickTarget.Dataset -> viewModel.onAction(DatasetDetailAction.OnDatasetFolderPicked(folder))
-            PickTarget.AutoSort -> Unit
         }
     }
     val pickZip = rememberArchivePicker { viewModel.onAction(DatasetDetailAction.OnDatasetZipPicked(it)) }
@@ -135,6 +143,14 @@ fun DatasetDetailRoot(
             DatasetDetailEvent.NavigateBack -> onBack()
             is DatasetDetailEvent.ShareFile -> sharer.share(event.file.path, event.file.mimeType)
             is DatasetDetailEvent.ShowMessage -> scope.launch { snackbar.showSnackbar(event.message.asStringAsync()) }
+            is DatasetDetailEvent.ShowUndo -> scope.launch {
+                val result = snackbar.showSnackbar(
+                    message = event.message.asStringAsync(),
+                    actionLabel = getString(Res.string.action_undo),
+                    duration = SnackbarDuration.Long,
+                )
+                if (result == SnackbarResult.ActionPerformed) viewModel.onAction(DatasetDetailAction.OnUndoDelete(event.imageIds))
+            }
             is DatasetDetailEvent.FocusClass -> scope.launch {
                 // Let the new class reach the list before scrolling to it.
                 withFrameNanos { }
@@ -147,6 +163,7 @@ fun DatasetDetailRoot(
     DatasetDetailScreen(
         state = state,
         onAction = viewModel::onAction,
+        onOpenCapture = onOpenCapture,
         onPickImages = { classId ->
             pickTarget = PickTarget.Class(classId)
             pickImages()
@@ -160,42 +177,42 @@ fun DatasetDetailRoot(
             pickFolder()
         },
         onPickDatasetZip = pickZip,
-        onPickAutoSortPhotos = {
-            pickTarget = PickTarget.AutoSort
-            pickImages()
-        },
         listState = listState,
         snackbar = snackbar,
     )
 }
 
+/**
+ * A dataset at a glance: how ready each class is, its newest images, and the two things to do next, capture
+ * more or export, always in reach at the bottom.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DatasetDetailScreen(
     state: DatasetDetailState,
     onAction: (DatasetDetailAction) -> Unit,
+    onOpenCapture: (classId: Int?) -> Unit = {},
     onPickImages: (classId: Int) -> Unit = {},
     onPickClassFolder: (classId: Int) -> Unit = {},
     onPickDatasetFolder: () -> Unit = {},
     onPickDatasetZip: () -> Unit = {},
-    onPickAutoSortPhotos: () -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     var renaming by remember { mutableStateOf(false) }
     var deletingClass by remember { mutableStateOf<ClassUi?>(null) }
     var clearingClass by remember { mutableStateOf<ClassUi?>(null) }
-    var openImage by remember { mutableStateOf<Long?>(null) }
+    var viewing by remember { mutableStateOf<ViewerTarget?>(null) }
+    val openImage: (Long) -> Unit = { imageId ->
+        state.classes.firstOrNull { imageId in it.imageIds }?.let { viewing = ViewerTarget(it.id, imageId) }
+    }
     var galleryClassId by remember { mutableStateOf<Int?>(null) }
     var editingImageSettings by remember { mutableStateOf(false) }
     var confirmingConversion by remember { mutableStateOf(false) }
     var showingBalance by remember { mutableStateOf(false) }
     var showingExport by remember { mutableStateOf(false) }
+    var showingUnknowns by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    // Shrinks to its icon while scrolling down the classes, and grows back when scrolling up.
-    val fabExpanded by remember { derivedStateOf { !listState.canScrollBackward || listState.lastScrolledBackward } }
-    // Hidden while the camera is open, where it would cover the record button.
-    val showFab = !state.loading && state.canEdit && !state.cameraOpen
     val scrollToClass = { classId: Int ->
         val index = state.classes.indexOfFirst { it.id == classId }
         if (index >= 0) scope.launch { listState.animateScrollToItem(index + state.firstClassIndex) }
@@ -214,16 +231,9 @@ fun DatasetDetailScreen(
                     },
                     title = { Text(state.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     actions = {
-                        IconButton(onClick = { renaming = true }, enabled = !state.loading) {
-                            Icon(AppIcons.Edit, contentDescription = stringResource(Res.string.dataset_rename))
-                        }
-                        if (!wide) {
-                            IconButton(onClick = { showingExport = true }, enabled = !state.loading && state.imageCount > 0) {
-                                Icon(AppIcons.Download, contentDescription = stringResource(Res.string.export_title))
-                            }
-                        }
                         DatasetMenu(
                             enabled = state.canEdit,
+                            onRename = { renaming = true },
                             onImportFolder = onPickDatasetFolder,
                             onImportZip = onPickDatasetZip,
                             onImageSettings = { editingImageSettings = true },
@@ -232,8 +242,15 @@ fun DatasetDetailScreen(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 )
             },
-            floatingActionButton = {
-                if (!wide && showFab) AddClassButton(expanded = fabExpanded, onClick = { onAction(DatasetDetailAction.OnAddClass) })
+            bottomBar = {
+                if (!state.loading) {
+                    ActionBar(
+                        canExport = state.imageCount > 0 && state.canEdit,
+                        canCapture = state.canEdit,
+                        onExport = { showingExport = true },
+                        onCapture = { onOpenCapture(null) },
+                    )
+                }
             },
             snackbarHost = { SnackbarHost(snackbar) },
             containerColor = MaterialTheme.colorScheme.background,
@@ -247,10 +264,10 @@ fun DatasetDetailScreen(
                         wide = wide,
                         listState = listState,
                         onAction = onAction,
+                        onOpenCapture = onOpenCapture,
                         onPickImages = onPickImages,
                         onPickClassFolder = onPickClassFolder,
-                        onPickAutoSortPhotos = onPickAutoSortPhotos,
-                        onOpenImage = { openImage = it },
+                        onOpenImage = openImage,
                         onViewAll = { galleryClassId = it },
                         onClearClass = { clearingClass = it },
                         onConvertImages = { confirmingConversion = true },
@@ -260,10 +277,8 @@ fun DatasetDetailScreen(
                             else deletingClass = imageClass
                         },
                         onShowBalance = { showingBalance = true },
+                        onShowUnknowns = { showingUnknowns = true },
                         onClassClick = { scrollToClass(it) },
-                        addClassButton = {
-                            if (showFab) AddClassButton(expanded = fabExpanded, onClick = { onAction(DatasetDetailAction.OnAddClass) })
-                        },
                     )
                 }
             }
@@ -287,6 +302,7 @@ fun DatasetDetailScreen(
             ExportContent(
                 datasetName = state.name,
                 classes = state.classes,
+                unknownCount = state.unknowns.size,
                 enabled = state.canEdit,
                 onExport = {
                     showingExport = false
@@ -294,6 +310,18 @@ fun DatasetDetailScreen(
                 },
             )
         }
+    }
+
+    if (showingUnknowns) {
+        UnknownImagesSheet(
+            unknowns = state.unknowns,
+            classes = state.classes,
+            enabled = state.canEdit,
+            onFileToClass = { onAction(DatasetDetailAction.OnUnknownsToClass(it)) },
+            onFileToNewClass = { onAction(DatasetDetailAction.OnUnknownsToNewClass(it)) },
+            onDiscard = { onAction(DatasetDetailAction.OnDiscardUnknowns(it)) },
+            onDismiss = { showingUnknowns = false },
+        )
     }
 
     state.importPreview?.let { preview ->
@@ -386,7 +414,8 @@ fun DatasetDetailScreen(
                 imageClass = imageClass,
                 otherClasses = state.classes - imageClass,
                 enabled = state.canEdit,
-                onOpenImage = { openImage = it },
+                snackbar = snackbar,
+                onOpenImage = openImage,
                 onMove = { ids, target -> onAction(DatasetDetailAction.OnMoveImages(ids, target)) },
                 onDelete = { onAction(DatasetDetailAction.OnDeleteImages(it)) },
                 onDismiss = { galleryClassId = null },
@@ -394,31 +423,30 @@ fun DatasetDetailScreen(
         }
     }
 
-    // After the gallery, so an image opened from it shows on top.
-    openImage?.let { imageId ->
-        val owner = state.classes.firstOrNull { imageId in it.imageIds }
+    // After the gallery, so an image opened from it shows on top. It follows the class rather than the image,
+    // so deleting or moving the one showing moves on to the next.
+    viewing?.let { target ->
+        val owner = state.classes.firstOrNull { it.id == target.classId }
         if (owner == null) {
-            SideEffect { openImage = null }
+            SideEffect { viewing = null }
         } else {
-            ImageDialog(
+            ImageViewer(
                 datasetId = state.datasetId,
-                imageId = imageId,
-                className = owner.name,
+                imageClass = owner,
+                initialImageId = target.imageId,
                 otherClasses = state.classes - owner,
                 enabled = state.canEdit,
-                onMove = { target ->
-                    openImage = null
-                    onAction(DatasetDetailAction.OnMoveImages(setOf(imageId), target))
-                },
-                onDelete = {
-                    openImage = null
-                    onAction(DatasetDetailAction.OnDeleteImages(setOf(imageId)))
-                },
-                onDismiss = { openImage = null },
+                snackbar = snackbar,
+                onMove = { id, target -> onAction(DatasetDetailAction.OnMoveImages(setOf(id), target)) },
+                onDelete = { onAction(DatasetDetailAction.OnDeleteImages(setOf(it))) },
+                onDismiss = { viewing = null },
             )
         }
     }
 }
+
+/** The image the viewer opened on, and the class it pages through. */
+private data class ViewerTarget(val classId: Int, val imageId: Long)
 
 /**
  * Lazy, so only the class cards on screen are composed; datasets with many classes would otherwise lay
@@ -430,19 +458,19 @@ private fun DatasetContent(
     wide: Boolean,
     listState: LazyListState,
     onAction: (DatasetDetailAction) -> Unit,
+    onOpenCapture: (Int?) -> Unit,
     onPickImages: (Int) -> Unit,
     onPickClassFolder: (Int) -> Unit,
-    onPickAutoSortPhotos: () -> Unit,
     onOpenImage: (Long) -> Unit,
     onViewAll: (Int) -> Unit,
     onClearClass: (ClassUi) -> Unit,
     onDeleteClass: (ClassUi) -> Unit,
     onConvertImages: () -> Unit,
     onShowBalance: () -> Unit,
+    onShowUnknowns: () -> Unit,
     onClassClick: (Int) -> Unit,
-    addClassButton: @Composable () -> Unit,
 ) {
-    val banner: LazyListScope.() -> Unit = {
+    val items: LazyListScope.() -> Unit = {
         val transfer = state.transfer
         val conversion = state.conversion
         when {
@@ -471,133 +499,111 @@ private fun DatasetContent(
                 )
             }
         }
-    }
-    val autoSort: LazyListScope.() -> Unit = {
-        item(key = "auto-sort") {
-            val autoSortUi = state.autoSort
-            if (autoSortUi == null) {
-                AutoSortEntryCard(
-                    enabled = state.canEdit,
-                    onOpen = { onAction(DatasetDetailAction.OnOpenAutoSort) },
-                    modifier = Modifier.animateItem(),
-                )
-            } else {
-                AutoSortCard(
-                    autoSort = autoSortUi,
-                    classes = state.classes,
-                    facing = state.cameraFacing,
-                    recording = state.recording,
-                    enabled = state.canEdit,
-                    onAction = onAction,
-                    onPickPhotos = onPickAutoSortPhotos,
-                    modifier = Modifier.animateItem(),
-                )
-            }
+        if (state.unknowns.isNotEmpty()) {
+            item(key = "unknowns") { UnknownImagesCard(state.unknowns, onClick = onShowUnknowns, modifier = Modifier.animateItem()) }
+        }
+        item(key = "add-class") {
+            AddClassCard(enabled = state.canEdit, onClick = { onAction(DatasetDetailAction.OnAddClass) }, modifier = Modifier.animateItem())
+        }
+        // Oldest first, so classes read top to bottom in the order they were made.
+        items(state.classes, key = { it.id }) { imageClass ->
+            ClassCard(
+                datasetId = state.datasetId,
+                imageClass = imageClass,
+                enabled = state.canEdit,
+                onRename = { onAction(DatasetDetailAction.OnRenameClass(imageClass.id, it)) },
+                onCapture = { onOpenCapture(imageClass.id) },
+                onUpload = { onPickImages(imageClass.id) },
+                onAddFolder = { onPickClassFolder(imageClass.id) },
+                onViewAll = { onViewAll(imageClass.id) },
+                onClear = { onClearClass(imageClass) },
+                onDelete = { onDeleteClass(imageClass) },
+                onOpenImage = onOpenImage,
+                modifier = Modifier.animateItem(),
+            )
         }
     }
-    val classes: LazyListScope.() -> Unit = {
-        classItems(state, onAction, onPickImages, onPickClassFolder, onOpenImage, onViewAll, onClearClass, onDeleteClass)
-    }
     val spacing = Arrangement.spacedBy(16.dp)
-    // Room at the end so the last class can scroll clear of the add-class button.
-    val listPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp)
+    val listPadding = PaddingValues(16.dp)
 
     if (wide) {
         // Classes on the left; balance and export always visible beside them.
         Row(Modifier.fillMaxSize().imePadding()) {
-            Box(Modifier.weight(1.3f).fillMaxHeight()) {
-                LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = listPadding, verticalArrangement = spacing) {
-                    banner()
-                    autoSort()
-                    classes()
-                }
-                Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) { addClassButton() }
+            LazyColumn(Modifier.weight(1.3f).fillMaxHeight(), state = listState, contentPadding = listPadding, verticalArrangement = spacing) {
+                items()
             }
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = spacing) {
                 ClassBalanceCard(state.balance, onClassClick = onClassClick)
                 ExportCard(
                     datasetName = state.name,
                     classes = state.classes,
+                    unknownCount = state.unknowns.size,
                     enabled = state.canEdit,
                     onExport = { onAction(DatasetDetailAction.OnExport) },
                 )
             }
         }
     } else {
-        // Balance and export live in sheets, so the summary stays in reach however many classes there are.
+        // Balance lives in a sheet, so the summary stays in reach however many classes there are.
         Column(Modifier.fillMaxSize().imePadding(), horizontalAlignment = Alignment.CenterHorizontally) {
             BalanceSummaryStrip(state.balance, onClick = onShowBalance)
             LazyColumn(Modifier.widthIn(max = 672.dp).fillMaxWidth().weight(1f), state = listState, contentPadding = listPadding, verticalArrangement = spacing) {
-                banner()
-                autoSort()
-                classes()
+                items()
             }
         }
     }
 }
 
-/** Adds a class; shown floating over the class list so it's in reach however long the list is. */
+/** The screen's two main actions, side by side above the navigation bar. */
 @Composable
-private fun AddClassButton(expanded: Boolean, onClick: () -> Unit) {
-    ExtendedFloatingActionButton(
-        onClick = onClick,
-        expanded = expanded,
-        icon = { Icon(AppIcons.Add, contentDescription = null) },
-        text = { Text(stringResource(Res.string.class_add)) },
-    )
+private fun ActionBar(canExport: Boolean, canCapture: Boolean, onExport: () -> Unit, onCapture: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
+        Column {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(onClick = onExport, enabled = canExport, modifier = Modifier.weight(1f).height(52.dp)) {
+                    Icon(AppIcons.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text(stringResource(Res.string.action_export), modifier = Modifier.padding(start = 8.dp))
+                }
+                Button(onClick = onCapture, enabled = canCapture, modifier = Modifier.weight(1.4f).height(52.dp)) {
+                    Icon(AppIcons.Camera, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text(stringResource(Res.string.action_capture), modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        }
+    }
 }
 
-private fun LazyListScope.classItems(
-    state: DatasetDetailState,
-    onAction: (DatasetDetailAction) -> Unit,
-    onPickImages: (Int) -> Unit,
-    onPickClassFolder: (Int) -> Unit,
-    onOpenImage: (Long) -> Unit,
-    onViewAll: (Int) -> Unit,
-    onClearClass: (ClassUi) -> Unit,
-    onDeleteClass: (ClassUi) -> Unit,
-) {
-    val editable = state.canEdit
-    items(state.classes, key = { it.id }) { imageClass ->
-        val capturing = state.cameraClassId == imageClass.id
-        ClassCard(
-            datasetId = state.datasetId,
-            imageClass = imageClass,
-            enabled = editable,
-            onRename = { onAction(DatasetDetailAction.OnRenameClass(imageClass.id, it)) },
-            onCamera = { onAction(DatasetDetailAction.OnOpenCamera(imageClass.id)) },
-            onUpload = { onPickImages(imageClass.id) },
-            onAddFolder = { onPickClassFolder(imageClass.id) },
-            onViewAll = { onViewAll(imageClass.id) },
-            onClear = { onClearClass(imageClass) },
-            onDelete = { onDeleteClass(imageClass) },
-            onOpenImage = onOpenImage,
-            modifier = Modifier.animateItem(),
-            camera = if (!capturing) null else {
-                {
-                    CameraPanel(
-                        facing = state.cameraFacing,
-                        // Frames are only converted while capturing.
-                        onCapture = if (state.capturing) { jpeg -> onAction(DatasetDetailAction.OnCapture(jpeg)) } else null,
-                        onFlip = { onAction(DatasetDetailAction.OnFlipCamera) },
-                        onClose = { onAction(DatasetDetailAction.OnCloseCamera) },
-                    ) {
-                        HoldToRecordButton(
-                            recording = state.recording,
-                            enabled = editable,
-                            onStart = { onAction(DatasetDetailAction.OnStartRecording) },
-                            onStop = { onAction(DatasetDetailAction.OnStopRecording) },
-                        )
-                    }
-                }
-            },
-        )
+/** Heads the class list, so adding a class is in reach without scrolling past every class. */
+@Composable
+private fun AddClassCard(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.background,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = modifier.fillMaxWidth().height(56.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Icon(AppIcons.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Text(
+                stringResource(Res.string.class_add),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
     }
 }
 
 @Composable
 private fun DatasetMenu(
     enabled: Boolean,
+    onRename: () -> Unit,
     onImportFolder: () -> Unit,
     onImportZip: () -> Unit,
     onImageSettings: () -> Unit,
@@ -608,6 +614,11 @@ private fun DatasetMenu(
             Icon(AppIcons.MoreVert, contentDescription = stringResource(Res.string.action_more_options))
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(Res.string.dataset_rename)) },
+                leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
+                onClick = { menuOpen = false; onRename() },
+            )
             DropdownMenuItem(
                 text = { Text(stringResource(Res.string.dataset_import_folder)) },
                 leadingIcon = { Icon(AppIcons.Folder, contentDescription = null) },
@@ -645,7 +656,7 @@ private fun LoadingState(modifier: Modifier) {
 private fun DatasetDetailScreenPreview() {
     val classes = listOf(
         DatasetClass(1, "cat", (1L..42L).toList()),
-        DatasetClass(2, "dog", (43L..70L).toList()),
+        DatasetClass(2, "dog", (43L..56L).toList()),
         DatasetClass(3, "bird", emptyList()),
     )
     DataDroidTheme {

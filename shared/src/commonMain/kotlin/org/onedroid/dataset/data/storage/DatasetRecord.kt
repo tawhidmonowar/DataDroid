@@ -39,9 +39,19 @@ data class ClassRecord(val id: Int, val name: String, val images: List<ImageReco
 @Serializable
 data class ImageRecord(val id: Long, val extension: String, val revision: Int = 0)
 
-/** The `metadata.json` written at the top of an exported dataset zip. */
+/**
+ * The `metadata.json` written at the top of an exported dataset zip. [unknownFolder] names the folder beside
+ * the dataset folder that holds [unknownImageCount] images auto-sort couldn't place; it's left out when there
+ * are none.
+ */
 @Serializable
-data class DatasetMetadata(val name: String, val classes: List<String>, val imageCount: Int)
+data class DatasetMetadata(
+    val name: String,
+    val classes: List<String>,
+    val imageCount: Int,
+    val unknownFolder: String? = null,
+    val unknownImageCount: Int = 0,
+)
 
 internal fun DatasetRecord.toDataset(id: String) = Dataset(
     id = id,

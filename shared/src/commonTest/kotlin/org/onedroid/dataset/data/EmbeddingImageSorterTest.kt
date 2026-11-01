@@ -109,6 +109,28 @@ class EmbeddingImageSorterTest {
     }
 
     @Test
+    fun imagesEmbeddedForSavingArentEmbeddedAgain() = runTest {
+        val (id, red, _) = redAndBlue()
+        val sorter = sorter()
+        sorter.matcherFor(dataset(id)).value()
+        assertEquals(6, embedCalls)
+
+        // As auto-sort does: embed a frame, save it, refit.
+        val frame = fakeJpeg("red-frame")
+        sorter.embed(frame, saving = true).value()
+        repository.addImages(id, red, listOf(source(frame)))
+        sorter.matcherFor(dataset(id)).value()
+        assertEquals(7, embedCalls)
+
+        // A preview frame isn't kept, so if it's saved after all it's embedded from the stored image.
+        val preview = fakeJpeg("red-preview")
+        sorter.embed(preview).value()
+        repository.addImages(id, red, listOf(source(preview)))
+        sorter.matcherFor(dataset(id)).value()
+        assertEquals(9, embedCalls)
+    }
+
+    @Test
     fun deletedImagesStopCounting() = runTest {
         val (id, red, blue) = redAndBlue()
         val sorter = sorter()

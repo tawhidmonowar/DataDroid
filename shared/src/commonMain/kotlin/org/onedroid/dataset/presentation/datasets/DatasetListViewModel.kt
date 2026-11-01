@@ -20,7 +20,9 @@ import org.onedroid.dataset.domain.onSuccess
 import org.onedroid.dataset.presentation.components.UiText
 import org.onedroid.dataset.presentation.components.toUiText
 import org.onedroid.dataset.domain.repository.DatasetRepository
+import org.onedroid.dataset.domain.usecase.ExportDataset
 import org.onedroid.dataset.domain.usecase.ImageConversions
+import org.onedroid.dataset.domain.usecase.KeepUnknownImages
 import org.onedroid.dataset.domain.usecase.ImageFolders
 import org.onedroid.dataset.core.platform.picker.PickedFile
 import org.onedroid.dataset.presentation.components.ImportPreviewUi
@@ -32,6 +34,8 @@ import org.onedroid.dataset.resources.message_dataset_imported
 class DatasetListViewModel(
     private val repository: DatasetRepository,
     private val conversions: ImageConversions,
+    private val exportDataset: ExportDataset,
+    private val keepUnknownImages: KeepUnknownImages,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DatasetListState())
@@ -80,7 +84,7 @@ class DatasetListViewModel(
     }
 
     private fun export(id: String) = runTransfer(TransferKind.EXPORT) {
-        repository.exportDataset(id, onProgress = ::onProgress)
+        exportDataset(id, onProgress = ::onProgress)
             .onSuccess { _events.send(DatasetListEvent.ShareFile(it)) }
             .onFailure { showError(it) }
     }
@@ -99,7 +103,7 @@ class DatasetListViewModel(
             is Result.Success -> read.data
         }
         val layout = ImageFolders.analyze(contents.images)
-        val preview = ImportPreviewUi.defaultFor(layout, contents.name)
+        val preview = ImportPreviewUi.defaultFor(layout, contents.name, contents.unknownImages)
         when {
             preview.groups.isEmpty() -> showError(DataError.Archive.NO_IMAGES)
             // Ask how folders become classes; the import continues from OnConfirmImport.
@@ -117,6 +121,7 @@ class DatasetListViewModel(
     private suspend fun importDataset(preview: ImportPreviewUi) {
         repository.importDataset(preview.datasetName, preview.groups, onProgress = ::onProgress)
             .onSuccess { id ->
+                keepUnknownImages(id, preview.unknownImages).onFailure { showError(it) }
                 _events.send(DatasetListEvent.ShowMessage(UiText.Resource(Res.string.message_dataset_imported)))
                 _events.send(DatasetListEvent.NavigateToDataset(id))
             }

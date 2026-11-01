@@ -176,7 +176,11 @@ class FileDatasetRepository(
         withContext(ioDispatcher) { files.readOrNull(files.thumbnailFile(datasetId, imageId)) } ?: throw NotFoundException()
     }
 
-    override suspend fun exportDataset(datasetId: String, onProgress: ProgressListener): Result<ExportedFile, DataError> {
+    override suspend fun exportDataset(
+        datasetId: String,
+        unknownImages: List<ImageSource>,
+        onProgress: ProgressListener,
+    ): Result<ExportedFile, DataError> {
         val record = when (val snapshot = catching { locked { current(datasetId) } }) {
             is Result.Error -> return snapshot
             is Result.Success -> snapshot.data
@@ -193,6 +197,7 @@ class FileDatasetRepository(
                     record = record,
                     target = target,
                     readImage = { image -> files.readOrNull(files.imageFile(datasetId, image)) },
+                    unknownImages = unknownImages,
                     onProgress = onProgress,
                 )
                 ExportedFile(target.toString(), DatasetExporter.MIME_TYPE)
@@ -505,11 +510,6 @@ class FileDatasetRepository(
         Result.Error(if (e.isDiskFull()) DataError.Local.DISK_FULL else DataError.Local.UNKNOWN)
     } catch (e: Exception) {
         Result.Error(if (e.isDiskFull()) DataError.Local.DISK_FULL else DataError.Local.UNKNOWN)
-    }
-
-    private fun Throwable.isDiskFull(): Boolean {
-        val text = generateSequence(this) { it.cause }.mapNotNull { it.message }.joinToString(" ")
-        return "ENOSPC" in text || "No space left" in text
     }
 
     private class NotFoundException : Exception()

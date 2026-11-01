@@ -97,7 +97,8 @@ class MatcherBenchmark {
 
     /**
      * Refit and match time as the dataset grows: each file's images are shuffled per class and cut to a range of
-     * sizes. Prints `cost,<matcher>,<images>,<median fit ms>,<mean match ms>` lines.
+     * sizes. Prints `cost,<matcher>,<images>,<median fit ms>,<mean match ms>` lines, and
+     * `refit,<images>,<median ms>` lines for the app's refit after one new image, which reuses earlier grouping.
      */
     @Test
     fun measureCost() {
@@ -117,8 +118,26 @@ class MatcherBenchmark {
                     val matchMillis = kotlin.system.measureNanoTime { queries.forEach { fitted(it, 50) } } / 1e6 / queries.size
                     println("cost,$name,${subset.values.sumOf { it.size }},%.2f,%.4f".format(fits[fits.size / 2], matchMillis))
                 }
+                val refits = measureRefit(subset)
+                println("refit,${subset.values.sumOf { it.size }},%.2f".format(refits[refits.size / 2]))
             }
         }
+    }
+
+    /** Sorted times of refitting after the largest class gains one image, as when the camera saves one. */
+    private fun measureRefit(byClass: Map<Int, List<FloatArray>>): List<Double> {
+        val growing = byClass.mapValues { it.value.toMutableList() }
+        val images = growing.values.maxBy { it.size }
+        val added = images.removeAt(images.lastIndex)
+        val fitter = ClassMatcher.Fitter()
+        return List(COST_WARMUPS + COST_RUNS) {
+            // Taking the image out regroups the class, untimed, so each timed refit adds it afresh.
+            fitter.fit(growing)
+            images += added
+            val millis = kotlin.system.measureNanoTime { fitter.fit(growing) } / 1e6
+            images.removeAt(images.lastIndex)
+            millis
+        }.drop(COST_WARMUPS).sorted()
     }
 
     /** Per class, [Scenario.photos] single photos and 0 to [Scenario.maxBursts] bursts with all their frames. */
