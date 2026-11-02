@@ -75,11 +75,12 @@ fun UnknownImagesCard(unknowns: List<UnknownImage>, onClick: () -> Unit, modifie
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+        // Unknowns are a normal part of auto-sort, not a problem, so this reads as an inbox rather than an error.
+        color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = modifier.fillMaxWidth(),
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(AppIcons.Help, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            Icon(AppIcons.Inbox, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(
                     pluralStringResource(Res.plurals.unknown_title, unknowns.size, unknowns.size),
@@ -125,7 +126,7 @@ fun UnknownImagesSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))) {
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(AppIcons.Help, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                Icon(AppIcons.Inbox, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text(
                     pluralStringResource(Res.plurals.unknown_title, unknowns.size, unknowns.size),
                     style = MaterialTheme.typography.titleLarge,

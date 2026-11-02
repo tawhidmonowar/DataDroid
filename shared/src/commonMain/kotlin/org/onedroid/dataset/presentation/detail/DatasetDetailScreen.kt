@@ -1,6 +1,7 @@
 package org.onedroid.dataset.presentation.detail
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -155,7 +156,7 @@ fun DatasetDetailRoot(
                 // Let the new class reach the list before scrolling to it.
                 withFrameNanos { }
                 val index = currentState.classes.indexOfFirst { it.id == event.classId }
-                if (index >= 0) listState.animateScrollToItem(index + currentState.firstClassIndex)
+                if (index >= 0) listState.animateScrollToItem(index + FIRST_CLASS_INDEX)
             }
         }
     }
@@ -215,7 +216,7 @@ fun DatasetDetailScreen(
     val scope = rememberCoroutineScope()
     val scrollToClass = { classId: Int ->
         val index = state.classes.indexOfFirst { it.id == classId }
-        if (index >= 0) scope.launch { listState.animateScrollToItem(index + state.firstClassIndex) }
+        if (index >= 0) scope.launch { listState.animateScrollToItem(index + FIRST_CLASS_INDEX) }
     }
 
     BoxWithConstraints {
@@ -470,40 +471,36 @@ private fun DatasetContent(
     onShowUnknowns: () -> Unit,
     onClassClick: (Int) -> Unit,
 ) {
+    val spacing = Arrangement.spacedBy(16.dp)
+    val listPadding = PaddingValues(16.dp)
     val items: LazyListScope.() -> Unit = {
-        val transfer = state.transfer
-        val conversion = state.conversion
-        when {
-            transfer != null -> item(key = "transfer") {
-                ProgressBanner(
-                    text = transfer.label(),
-                    fraction = transfer.fraction,
-                    onCancel = { onAction(DatasetDetailAction.OnCancelTransfer) },
-                    modifier = Modifier.animateItem(),
-                )
+        // One item for everything above the classes. A banner that arrives later (unknown images load after
+        // the classes) then grows this item instead of being inserted above it, where LazyColumn would keep
+        // the item below it anchored and leave the banner scrolled out of view.
+        item(key = "header") {
+            Column(Modifier.animateContentSize(), verticalArrangement = spacing) {
+                val transfer = state.transfer
+                val conversion = state.conversion
+                when {
+                    transfer != null -> ProgressBanner(
+                        text = transfer.label(),
+                        fraction = transfer.fraction,
+                        onCancel = { onAction(DatasetDetailAction.OnCancelTransfer) },
+                    )
+                    conversion != null -> ProgressBanner(
+                        text = conversion.label(),
+                        fraction = conversion.fraction,
+                        onCancel = { onAction(DatasetDetailAction.OnCancelConversion) },
+                    )
+                    state.offersConversion -> OutdatedImagesCard(
+                        count = state.outdatedImageCount,
+                        enabled = state.canEdit,
+                        onConvert = onConvertImages,
+                    )
+                }
+                if (state.unknowns.isNotEmpty()) UnknownImagesCard(state.unknowns, onClick = onShowUnknowns)
+                AddClassCard(enabled = state.canEdit, onClick = { onAction(DatasetDetailAction.OnAddClass) })
             }
-            conversion != null -> item(key = "conversion") {
-                ProgressBanner(
-                    text = conversion.label(),
-                    fraction = conversion.fraction,
-                    onCancel = { onAction(DatasetDetailAction.OnCancelConversion) },
-                    modifier = Modifier.animateItem(),
-                )
-            }
-            state.offersConversion -> item(key = "outdated") {
-                OutdatedImagesCard(
-                    count = state.outdatedImageCount,
-                    enabled = state.canEdit,
-                    onConvert = onConvertImages,
-                    modifier = Modifier.animateItem(),
-                )
-            }
-        }
-        if (state.unknowns.isNotEmpty()) {
-            item(key = "unknowns") { UnknownImagesCard(state.unknowns, onClick = onShowUnknowns, modifier = Modifier.animateItem()) }
-        }
-        item(key = "add-class") {
-            AddClassCard(enabled = state.canEdit, onClick = { onAction(DatasetDetailAction.OnAddClass) }, modifier = Modifier.animateItem())
         }
         // Oldest first, so classes read top to bottom in the order they were made.
         items(state.classes, key = { it.id }) { imageClass ->
@@ -523,8 +520,6 @@ private fun DatasetContent(
             )
         }
     }
-    val spacing = Arrangement.spacedBy(16.dp)
-    val listPadding = PaddingValues(16.dp)
 
     if (wide) {
         // Classes on the left; balance and export always visible beside them.
@@ -642,6 +637,9 @@ private fun DatasetMenu(
 }
 
 private val WIDE_LAYOUT_WIDTH = 840.dp
+
+/** List index of the first class, after the header item. */
+private const val FIRST_CLASS_INDEX = 1
 
 @Composable
 private fun LoadingState(modifier: Modifier) {

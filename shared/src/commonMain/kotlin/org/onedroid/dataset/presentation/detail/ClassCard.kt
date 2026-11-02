@@ -59,8 +59,9 @@ import org.onedroid.dataset.presentation.theme.classColor
 import org.onedroid.dataset.resources.Res
 import org.onedroid.dataset.resources.action_capture
 import org.onedroid.dataset.resources.action_options_for
-import org.onedroid.dataset.resources.action_rename_item
+import org.onedroid.dataset.resources.action_rename
 import org.onedroid.dataset.resources.action_save_name
+import org.onedroid.dataset.resources.class_capture_into
 import org.onedroid.dataset.resources.class_delete
 import org.onedroid.dataset.resources.class_empty
 import org.onedroid.dataset.resources.class_folder
@@ -69,6 +70,7 @@ import org.onedroid.dataset.resources.class_name_label
 import org.onedroid.dataset.resources.class_ready
 import org.onedroid.dataset.resources.class_remove_all
 import org.onedroid.dataset.resources.class_see_all
+import org.onedroid.dataset.resources.class_upload
 import org.onedroid.dataset.resources.class_view_all
 import org.onedroid.dataset.resources.images_count
 import org.onedroid.dataset.resources.source_upload
@@ -76,7 +78,9 @@ import org.onedroid.dataset.resources.view_image
 
 /**
  * A class: its name, how close it is to the recommended number of images, its newest images, and ways to
- * add more. Tapping the card anywhere else opens all its images, as "See all" does.
+ * add more. Tapping the card anywhere else opens all its images, as "See all" does. Capture sits in the
+ * header and the rest in the menu; an empty class shows full buttons instead, since adding images is the
+ * only thing to do with it.
  */
 @Composable
 fun ClassCard(
@@ -97,7 +101,7 @@ fun ClassCard(
     // An empty class has nothing to open, but shouldn't look disabled for it.
     val colors = CardDefaults.elevatedCardColors().let { it.copy(disabledContainerColor = it.containerColor, disabledContentColor = it.contentColor) }
     ElevatedCard(onClick = onViewAll, enabled = count > 0, colors = colors, modifier = modifier.fillMaxWidth()) {
-        ClassHeader(imageClass, enabled, onRename, onAddFolder, onViewAll, onClear, onDelete)
+        ClassHeader(imageClass, enabled, onRename, onCapture, onUpload, onAddFolder, onViewAll, onClear, onDelete)
         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Progress(count, classColor(imageClass.colorIndex))
             if (count > 0) {
@@ -108,15 +112,15 @@ fun ClassCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onCapture, enabled = enabled) {
-                    Icon(AppIcons.Camera, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(stringResource(Res.string.action_capture), modifier = Modifier.padding(start = 8.dp))
-                }
-                OutlinedButton(onClick = onUpload, enabled = enabled) {
-                    Icon(AppIcons.Upload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(stringResource(Res.string.source_upload), modifier = Modifier.padding(start = 8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(onClick = onCapture, enabled = enabled) {
+                        Icon(AppIcons.Camera, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(stringResource(Res.string.action_capture), modifier = Modifier.padding(start = 8.dp))
+                    }
+                    OutlinedButton(onClick = onUpload, enabled = enabled) {
+                        Icon(AppIcons.Upload, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(stringResource(Res.string.source_upload), modifier = Modifier.padding(start = 8.dp))
+                    }
                 }
             }
         }
@@ -166,6 +170,8 @@ private fun ClassHeader(
     imageClass: ClassUi,
     enabled: Boolean,
     onRename: (String) -> Unit,
+    onCapture: () -> Unit,
+    onUpload: () -> Unit,
     onAddFolder: () -> Unit,
     onViewAll: () -> Unit,
     onClear: () -> Unit,
@@ -189,21 +195,16 @@ private fun ClassHeader(
                 modifier = Modifier.weight(1f).padding(start = 12.dp, top = 8.dp),
             )
         } else {
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    imageClass.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 12.dp).weight(1f, fill = false),
-                )
-                IconButton(onClick = { editing = true }, enabled = enabled) {
-                    Icon(
-                        AppIcons.Edit,
-                        contentDescription = stringResource(Res.string.action_rename_item, imageClass.name),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
+            Text(
+                imageClass.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 12.dp).weight(1f),
+            )
+            if (imageClass.imageIds.isNotEmpty()) {
+                IconButton(onClick = onCapture, enabled = enabled) {
+                    Icon(AppIcons.Camera, contentDescription = stringResource(Res.string.class_capture_into, imageClass.name))
                 }
             }
         }
@@ -212,6 +213,18 @@ private fun ClassHeader(
                 Icon(AppIcons.MoreVert, contentDescription = stringResource(Res.string.action_options_for, imageClass.name))
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(Res.string.action_rename)) },
+                    leadingIcon = { Icon(AppIcons.Edit, contentDescription = null) },
+                    enabled = enabled,
+                    onClick = { menuOpen = false; editing = true },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(Res.string.class_upload)) },
+                    leadingIcon = { Icon(AppIcons.Upload, contentDescription = null) },
+                    enabled = enabled,
+                    onClick = { menuOpen = false; onUpload() },
+                )
                 DropdownMenuItem(
                     text = { Text(stringResource(Res.string.class_view_all)) },
                     leadingIcon = { Icon(AppIcons.Grid, contentDescription = null) },

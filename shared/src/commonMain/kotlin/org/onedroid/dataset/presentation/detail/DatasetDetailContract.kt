@@ -45,12 +45,6 @@ data class DatasetDetailState(
 
     /** Outdated images can be converted (with passthrough settings there's nothing to convert them to). */
     val offersConversion: Boolean get() = conversion == null && outdatedImageCount > 0 && !imageSettings.isPassthrough
-
-    /** Whether a banner sits above the class list. */
-    val showsBanner: Boolean get() = transfer != null || conversion != null || offersConversion
-
-    /** List index of the first class: after the banner and the unknown images, if any, and the add-class card. */
-    val firstClassIndex: Int get() = (if (showsBanner) 1 else 0) + (if (unknowns.isNotEmpty()) 1 else 0) + 1
 }
 
 /** [colorIndex] picks the class's accent color; [imageIds] are oldest first. */

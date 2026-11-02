@@ -67,6 +67,8 @@
     <string name="class_clear_title">Remove all images from “%1$s”?</string>
     <string name="class_clear_message">Its %1$s will be permanently deleted. The class stays.</string>
     <string name="source_upload">Upload</string>
+    <string name="class_upload">Upload images</string>
+    <string name="class_capture_into">Capture into %1$s</string>
     <plurals name="message_images_added">
         <item quantity="one">Added %1$d image</item>
         <item quantity="other">Added %1$d images</item>
@@ -113,6 +115,8 @@
     <string name="capture_hint">Tap for one image, hold to record</string>
     <string name="capture_recent_empty">Images you capture show up here, newest first.</string>
     <string name="capture_shutter">Capture image</string>
+    <string name="capture_record_start">Start recording</string>
+    <string name="capture_record_stop">Stop recording</string>
     <string name="capture_library">Add photos from library</string>
     <string name="capture_unknowns">Unknown images</string>
     <string name="capture_auto_settings">Auto-sort settings</string>

@@ -55,17 +55,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -109,6 +119,8 @@ import org.onedroid.dataset.resources.capture_auto_settings
 import org.onedroid.dataset.resources.capture_auto_settings_body
 import org.onedroid.dataset.resources.capture_converting
 import org.onedroid.dataset.resources.capture_recent_empty
+import org.onedroid.dataset.resources.capture_record_start
+import org.onedroid.dataset.resources.capture_record_stop
 import org.onedroid.dataset.resources.capture_hint
 import org.onedroid.dataset.resources.capture_library
 import org.onedroid.dataset.resources.capture_saved
@@ -158,15 +170,17 @@ fun CaptureScreen(
     var addingClass by remember { mutableStateOf(false) }
     var showingUnknowns by remember { mutableStateOf(false) }
     var showingSettings by remember { mutableStateOf(false) }
+    val held = rememberHeld(state.recording)
 
     CameraTheme {
         LightSystemBarIcons()
         Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background) { padding ->
             BoxWithConstraints(Modifier.padding(padding).fillMaxSize()) {
-                val viewfinder = @Composable { modifier: Modifier -> Viewfinder(state, onAction, modifier) }
+                val viewfinder = @Composable { modifier: Modifier -> Viewfinder(state, held, onAction, modifier) }
                 val controls = @Composable { modifier: Modifier ->
                     Controls(
                         state = state,
+                        held = held,
                         onAction = onAction,
                         onPickPhotos = onPickPhotos,
                         onAddClass = { addingClass = true },
@@ -265,7 +279,7 @@ private fun TopBar(state: CaptureState, onAction: (CaptureAction) -> Unit, onSho
 
 /** Square, because captured frames are center-cropped to a square: what's shown is what's saved. */
 @Composable
-private fun Viewfinder(state: CaptureState, onAction: (CaptureAction) -> Unit, modifier: Modifier) {
+private fun Viewfinder(state: CaptureState, held: Boolean, onAction: (CaptureAction) -> Unit, modifier: Modifier) {
     val currentOnAction by rememberUpdatedState(onAction)
     val auto = state.target == CaptureTarget.Auto
     Box(modifier.background(Color.Black)) {
@@ -277,7 +291,7 @@ private fun Viewfinder(state: CaptureState, onAction: (CaptureAction) -> Unit, m
                 modifier = Modifier.matchParentSize(),
             )
         }
-        if (state.recording) {
+        if (held) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.error,
@@ -323,7 +337,7 @@ private fun PredictionPill(state: CaptureState, modifier: Modifier) {
                     match?.isUnknown == true && !autoSort.preparing -> Icon(
                         AppIcons.Help,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
+                        tint = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.size(16.dp),
                     )
                 }
@@ -349,6 +363,7 @@ private fun PredictionPill(state: CaptureState, modifier: Modifier) {
 @Composable
 private fun Controls(
     state: CaptureState,
+    held: Boolean,
     onAction: (CaptureAction) -> Unit,
     onPickPhotos: () -> Unit,
     onAddClass: () -> Unit,
@@ -356,7 +371,8 @@ private fun Controls(
     modifier: Modifier,
 ) {
     Column(modifier.fillMaxWidth().padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        StatusLine(state)
+        // Under Auto the selected chip already says where images go.
+        if (state.converting || state.targetClass != null) StatusLine(state)
         TargetChips(state, onAction, onAddClass)
         RecentCaptures(state, onShowUnknowns)
         Spacer(Modifier.weight(1f))
@@ -368,7 +384,7 @@ private fun Controls(
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
-        ShutterRow(state, onAction, onPickPhotos, onShowUnknowns)
+        ShutterRow(state, held, onAction, onPickPhotos, onShowUnknowns)
         Text(
             stringResource(Res.string.capture_hint),
             style = MaterialTheme.typography.bodySmall,
@@ -376,6 +392,8 @@ private fun Controls(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
+        // Tall phones leave room under the square viewfinder; sit the shutter in it rather than at the very bottom.
+        Spacer(Modifier.weight(0.5f))
     }
 }
 
@@ -410,6 +428,7 @@ private fun TargetChips(state: CaptureState, onAction: (CaptureAction) -> Unit, 
         state = listState,
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fadingEdges(start = listState.canScrollBackward, end = listState.canScrollForward),
     ) {
         item(key = "auto") {
             FilterChip(
@@ -501,7 +520,7 @@ private fun RecentCaptures(state: CaptureState, onShowUnknowns: () -> Unit) {
                                 Icon(
                                     AppIcons.Help,
                                     contentDescription = stringResource(Res.string.unknown_label),
-                                    tint = MaterialTheme.colorScheme.error,
+                                    tint = MaterialTheme.colorScheme.tertiary,
                                     modifier = Modifier.align(Alignment.TopEnd).padding(2.dp).size(16.dp)
                                         .background(Color.Black.copy(alpha = 0.6f), CircleShape),
                                 )
@@ -515,7 +534,7 @@ private fun RecentCaptures(state: CaptureState, onShowUnknowns: () -> Unit) {
 }
 
 @Composable
-private fun ShutterRow(state: CaptureState, onAction: (CaptureAction) -> Unit, onPickPhotos: () -> Unit, onShowUnknowns: () -> Unit) {
+private fun ShutterRow(state: CaptureState, held: Boolean, onAction: (CaptureAction) -> Unit, onPickPhotos: () -> Unit, onShowUnknowns: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 24.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -527,6 +546,7 @@ private fun ShutterRow(state: CaptureState, onAction: (CaptureAction) -> Unit, o
         val target = state.targetClass
         ShutterButton(
             recording = state.recording,
+            held = held,
             enabled = state.canCapture,
             color = target?.let { classColor(it.colorIndex) } ?: MaterialTheme.colorScheme.primary,
             onStart = { onAction(CaptureAction.OnStartRecording) },
@@ -537,7 +557,7 @@ private fun ShutterRow(state: CaptureState, onAction: (CaptureAction) -> Unit, o
         } else {
             SideButton(enabled = true, onClick = onShowUnknowns, label = stringResource(Res.string.capture_unknowns)) {
                 BadgedBox(badge = { Badge { Text(state.unknowns.size.toString()) } }) {
-                    Icon(AppIcons.Help, contentDescription = null)
+                    Icon(AppIcons.Inbox, contentDescription = null)
                 }
             }
         }
@@ -558,29 +578,56 @@ private fun SideButton(enabled: Boolean, onClick: () -> Unit, label: String, ico
     }
 }
 
-/** Captures one image on a tap and keeps capturing while held; turns into a red stop square while recording. */
+/**
+ * Captures one image on a tap and keeps capturing while held; turns into a red stop square while recording.
+ * [recording] is the press as the view model sees it, [held] whether it has lasted long enough to show.
+ */
 @Composable
-private fun ShutterButton(recording: Boolean, enabled: Boolean, color: Color, onStart: () -> Unit, onStop: () -> Unit) {
+private fun ShutterButton(
+    recording: Boolean,
+    held: Boolean,
+    enabled: Boolean,
+    color: Color,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+) {
     val currentOnStart by rememberUpdatedState(onStart)
     val currentOnStop by rememberUpdatedState(onStop)
     val fill by animateColorAsState(
         when {
             !enabled -> MaterialTheme.colorScheme.surfaceVariant
-            recording -> MaterialTheme.colorScheme.error
+            held -> MaterialTheme.colorScheme.error
             else -> color
         },
         label = "shutter",
     )
-    val innerSize by animateDpAsState(if (recording) 32.dp else 60.dp, label = "shutterSize")
-    val corner by animateDpAsState(if (recording) 8.dp else 30.dp, label = "shutterCorner")
+    val innerSize by animateDpAsState(if (held) 32.dp else 60.dp, label = "shutterSize")
+    val corner by animateDpAsState(if (held) 8.dp else 30.dp, label = "shutterCorner")
     val label = stringResource(Res.string.capture_shutter)
+    val recordingLabel = stringResource(Res.string.camera_recording)
+    val startLabel = stringResource(Res.string.capture_record_start)
+    val stopLabel = stringResource(Res.string.capture_record_stop)
     Box(
         Modifier
             .size(76.dp)
             .border(4.dp, if (enabled) Color.White else Color.White.copy(alpha = 0.38f), CircleShape)
+            // Screen readers can't press and hold, so a long press there starts recording and a tap stops it.
             .semantics {
                 role = Role.Button
                 contentDescription = label
+                if (recording) stateDescription = recordingLabel
+                if (!enabled) disabled()
+                onClick(label = if (recording) stopLabel else label) {
+                    if (!recording) currentOnStart()
+                    currentOnStop()
+                    true
+                }
+                if (!recording) {
+                    onLongClick(label = startLabel) {
+                        currentOnStart()
+                        true
+                    }
+                }
             }
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
@@ -595,6 +642,25 @@ private fun ShutterButton(recording: Boolean, enabled: Boolean, color: Color, on
         Box(Modifier.size(innerSize).clip(RoundedCornerShape(corner)).background(fill))
     }
 }
+
+/** Fades the content out towards an edge that has more to scroll to. */
+private fun Modifier.fadingEdges(start: Boolean, end: Boolean): Modifier =
+    if (!start && !end) this
+    else graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {
+        drawContent()
+        val fade = FADE_WIDTH.toPx() / size.width
+        drawRect(
+            Brush.horizontalGradient(
+                0f to if (start) Color.Transparent else Color.Black,
+                fade to Color.Black,
+                1f - fade to Color.Black,
+                1f to if (end) Color.Transparent else Color.Black,
+            ),
+            blendMode = BlendMode.DstIn,
+        )
+    }
+
+private val FADE_WIDTH = 32.dp
 
 /** How alike an image must be to a class to go to it; 0 turns unknowns off. */
 @Composable
@@ -616,6 +682,22 @@ private fun StrictnessControl(strictness: Int, onChange: (Int) -> Unit) {
         )
     }
 }
+
+/**
+ * Whether a shutter press has lasted long enough to show as recording. Every tap briefly records too (the
+ * view model starts on press and stops on release), so showing it at once would flash the badge on each shot.
+ */
+@Composable
+private fun rememberHeld(recording: Boolean): Boolean {
+    var held by remember { mutableStateOf(false) }
+    LaunchedEffect(recording) {
+        if (recording) delay(HOLD_TO_RECORD_MS)
+        held = recording
+    }
+    return held
+}
+
+private const val HOLD_TO_RECORD_MS = 250L
 
 private fun ClassMatch.percent(): String = "${(similarity * 100).roundToInt()}%"
 
