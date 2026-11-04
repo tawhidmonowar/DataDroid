@@ -4,7 +4,7 @@ author:
   - name: Tawhid Monowar
     affiliation: "[Affiliation]"
     email: "[Email]"
-date: "[Month Year]"
+date: "November 2026"
 abstract: |
   Building an image classification dataset on a phone usually means picking a class before every shot. We study
   *auto-labelling*: capture first, and let the device file each image into the class it most resembles, or hold it
@@ -44,8 +44,9 @@ Auto-labelling is a form of few-shot, open-set classification, but several pract
 the usual benchmark setting:
 
 1. **No training step.** Classes change constantly as the user captures. Any per-change optimisation, even a
-   linear probe, adds latency and complexity on a phone. A training-free matcher over frozen embeddings refits in
-   under a second for datasets of a few thousand images and needs no hyper-parameter search on the device.
+   linear probe, adds latency and complexity on a phone. A training-free matcher over frozen embeddings needs no
+   hyper-parameter search on the device, and ours refits in under a second on a laptop CPU for datasets of up to
+   about 5,000 images (Section 6.5).
 2. **Tiny, growing classes.** A new class may hold one to five images, and the matcher must already behave sensibly.
 3. **Bursts.** DataDroid records about five frames per second while the shutter is held. A two-second hold adds ten
    near-identical images to one class. Statistics such as class means and spreads are then dominated by whichever
@@ -250,7 +251,7 @@ transposition, centre square crop, bilinear resize to 224x224, and scaling to [0
 **Simulated bursts.** For the first 20 sampled photos of each class, we add four *neighbouring frames*. Each is a
 square crop of 88% to 98% of the short side, offset by up to ±4% of the side, with brightness scaled by 0.9 to 1.1.
 This gives five frames per burst, matching about one second of DataDroid's hold-to-record capture. The result is
-1,000 embeddings for flowers and 2,000 for Imagewoof. The embedding script (`scripts`) is released.
+1,000 embeddings for flowers and 2,000 for Imagewoof. The embedding script (`scripts/embed_dataset.py`) is released.
 
 ## 5.2 Scenarios
 
@@ -427,7 +428,8 @@ baseline accepts 18% to 36%).
 
 The ablation leads to four observations:
 
-- **Grouping** is the most consistent component. It never hurts, because without bursts almost no images pass $\tau$. In the
+- **Grouping** is the most consistent component. It never lowers accuracy by more than 0.1 point, because without bursts almost no
+  images pass $\tau$. In the
   burst scenarios it adds 1.4 to 4.2 points to the centroid matcher (for example flowers S4: 0.706 to 0.748;
   Imagewoof S4: 0.804 to 0.829).
 - **Centring** is scenario-dependent. It helps markedly with five photos per class (flowers S1: 0.616 to 0.672;
@@ -533,7 +535,7 @@ All code, including the evaluation harness, is open source.
 
 DataDroid, including the matcher (`ClassMatcher.kt`), the evaluator (`LeaveOneOut.kt`), the baseline fixture
 (`LegacyClassMatcher.kt`), the benchmark (`MatcherBenchmark.kt`) and the embedding script
-(`scripts`), is available at <https://github.com/tawhidmonowar/DataDroid> under the Apache 2.0
+(`scripts/embed_dataset.py`), is available at <https://github.com/tawhidmonowar/DataDroid> under the Apache 2.0
 licence. To reproduce Tables 2, 3 and 5 (run from the repository root; Gradle runs the test from the `shared`
 folder, so the embedding paths must be absolute):
 
@@ -550,7 +552,7 @@ python scripts/embed_dataset.py shared/src/commonMain/composeResources/files/mob
 DATADROID_EMBEDDINGS=$PWD/woof_large.bin ./gradlew :shared:testAndroidHostTest --tests '*MatcherBenchmark.measureCost' --rerun -i
 ```
 
-The results behind every figure are in `paper/data` as CSV files, and `scripts` redraws all figures
+The results behind every figure are in `paper/data` as CSV files, and `scripts/paper_figures.py` redraws all figures
 from them (it needs matplotlib and numpy):
 
 ```bash
