@@ -28,6 +28,7 @@ import org.onedroid.dataset.domain.DataError
 import org.onedroid.dataset.domain.EmptyResult
 import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.data.archive.ArchiveImporter
+import org.onedroid.dataset.data.archive.FileZipSource
 import org.onedroid.dataset.data.archive.DatasetExporter
 import org.onedroid.dataset.data.archive.ZipTooLargeException
 import org.onedroid.dataset.data.image.ImageFormat
@@ -130,8 +131,9 @@ class FileDatasetRepository(
         classId: Int,
         sources: List<ImageSource>,
         onProgress: ProgressListener,
+        onSaved: (index: Int) -> Unit,
     ): Result<ImportResult, DataError.Local> = catching {
-        addAll(datasetId, sources.map { classId to it }, onProgress)
+        addAll(datasetId, sources.map { classId to it }, onProgress, onSaved)
     }
 
     override suspend fun importLabeledImages(
@@ -205,9 +207,9 @@ class FileDatasetRepository(
         }
     }
 
-    override suspend fun readArchive(archive: ByteArray): Result<ArchiveContents, DataError.Archive> {
+    override suspend fun readArchive(path: String): Result<ArchiveContents, DataError.Archive> {
         val contents = try {
-            withContext(Dispatchers.Default) { ArchiveImporter.read(archive) }
+            withContext(Dispatchers.IO) { ArchiveImporter.read(FileZipSource(path)) }
         } catch (e: ZipTooLargeException) {
             return Result.Error(DataError.Archive.TOO_LARGE)
         } catch (e: IllegalArgumentException) {
@@ -340,6 +342,7 @@ class FileDatasetRepository(
         datasetId: String,
         items: List<Pair<Int, ImageSource>>,
         onProgress: ProgressListener,
+        onSaved: (index: Int) -> Unit = {},
     ): ImportResult {
         var added = 0
         var skipped = 0
@@ -364,7 +367,9 @@ class FileDatasetRepository(
                         commit(datasetId, updated, persist = !unsaved)
                         true
                     }
+                    val index = added + skipped
                     if (committed) added++ else skipped++
+                    if (committed) onSaved(index)
                     onProgress(added + skipped, items.size)
                 }
             }

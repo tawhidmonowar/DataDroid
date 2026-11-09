@@ -8,13 +8,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.withContext
-import org.onedroid.dataset.core.platform.image.toByteArray
-import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSFileSize
 import platform.Foundation.NSNumber
 import platform.Foundation.NSURL
-import platform.Foundation.dataWithContentsOfURL
 import platform.UIKit.UIDocumentPickerDelegateProtocol
 import platform.UIKit.UIDocumentPickerViewController
 import platform.UniformTypeIdentifiers.UTTypeZIP
@@ -48,7 +45,7 @@ private class DocumentPickerDelegate(
                     // asCopy put a regular file in our sandbox, so its size on disk is reliable.
                     val size = url.path?.let { NSFileManager.defaultManager.attributesOfItemAtPath(it, error = null)?.get(NSFileSize) as? NSNumber }
                     require(size != null && size.longLongValue <= maxSize) { "File is too large" }
-                    requireNotNull(NSData.dataWithContentsOfURL(url)) { "Could not read ${url.lastPathComponent}" }.toByteArray()
+                    requireNotNull(url.path) { "Could not read ${url.lastPathComponent}" }
                 }
             }
         )

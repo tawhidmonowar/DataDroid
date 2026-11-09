@@ -1,5 +1,6 @@
 package org.onedroid.dataset.testutil
 
+import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.files.SystemTemporaryDirectory
@@ -48,4 +49,11 @@ fun tempStorage(): StoragePaths {
     val root = Path(SystemTemporaryDirectory, "datadroid-test-" + Random.nextLong().toULong().toString(16))
     SystemFileSystem.createDirectories(root)
     return StoragePaths(datasetsRoot = Path(root, "datasets"), exportDirectory = Path(root, "exports"), settingsFile = Path(root, "settings.json"))
+}
+
+/** Writes [bytes] to a fresh temporary file, as a picked archive would be copied, and returns its path. */
+fun tempFile(bytes: ByteArray): String {
+    val path = Path(SystemTemporaryDirectory, "datadroid-test-" + Random.nextLong().toULong().toString(16) + ".zip")
+    SystemFileSystem.sink(path).buffered().use { it.write(bytes) }
+    return path.toString()
 }

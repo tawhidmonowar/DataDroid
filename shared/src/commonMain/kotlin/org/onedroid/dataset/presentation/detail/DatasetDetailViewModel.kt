@@ -6,7 +6,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -39,6 +38,7 @@ import org.onedroid.dataset.domain.usecase.UnknownDestination
 import org.onedroid.dataset.domain.usecase.computeClassBalance
 import org.onedroid.dataset.domain.usecase.uniqueName
 import org.onedroid.dataset.domain.usecase.validateName
+import org.onedroid.dataset.presentation.components.PickedArchive
 import org.onedroid.dataset.presentation.components.ImportPreviewUi
 import org.onedroid.dataset.presentation.components.TransferKind
 import org.onedroid.dataset.presentation.components.TransferUi
@@ -71,13 +71,15 @@ class DatasetDetailViewModel(
     val events = _events.receiveAsFlow()
 
     private var transferJob: Job? = null
+    private val archive = PickedArchive()
 
     /**
-     * Images deleted while undo is offered: hidden straight away, but only deleted for good once the offer
-     * runs out, by [undoJobs], or when the screen goes.
+     * Images deleted while undo is offered: hidden straight away, but only deleted for good once the screen
+     * reports the offer has gone (by [DatasetDetailAction.OnCommitDelete]), or when the screen goes.
+     * [undoGroups] holds each delete's images, so undo and commit act only on deletes still on offer.
      */
     private val pendingDeletes = MutableStateFlow<Set<Long>>(emptySet())
-    private val undoJobs = HashMap<Set<Long>, Job>()
+    private val undoGroups = HashSet<Set<Long>>()
 
     init {
         combine(repository.observeDataset(datasetId), pendingDeletes) { dataset, pending -> dataset?.withoutImages(pending) }
@@ -136,26 +138,39 @@ class DatasetDetailViewModel(
             }
             is DatasetDetailAction.OnDatasetFolderPicked -> importFolders { Result.Success(ArchiveContents(null, action.folder.images())) }
             is DatasetDetailAction.OnDatasetZipPicked -> importFolders {
-                val bytes = try {
-                    action.file.readBytes(maxSize = MAX_ARCHIVE_BYTES)
+                val path = try {
+                    action.file.localPath(maxSize = MAX_ARCHIVE_BYTES)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     return@importFolders Result.Error(if (e is IllegalArgumentException) DataError.Archive.TOO_LARGE else DataError.Archive.UNKNOWN)
                 }
-                repository.readArchive(bytes)
+                archive.hold(path)
+                repository.readArchive(path)
             }
             is DatasetDetailAction.OnImportNamingChange -> _state.update { it.copy(importPreview = it.importPreview?.copy(naming = action.naming)) }
             is DatasetDetailAction.OnImportMergeSplitsChange -> _state.update { it.copy(importPreview = it.importPreview?.copy(mergeSplits = action.merge)) }
             DatasetDetailAction.OnConfirmImport -> {
                 val preview = _state.value.importPreview
                 _state.update { it.copy(importPreview = null) }
-                if (preview != null) runTransfer(TransferKind.IMPORT) { importPreview(preview) }
+                if (preview != null) {
+                    runTransfer(TransferKind.IMPORT) {
+                        try {
+                            importPreview(preview)
+                        } finally {
+                            archive.release()
+                        }
+                    }
+                }
             }
-            DatasetDetailAction.OnDismissImport -> _state.update { it.copy(importPreview = null) }
+            DatasetDetailAction.OnDismissImport -> {
+                _state.update { it.copy(importPreview = null) }
+                archive.release()
+            }
             DatasetDetailAction.OnCancelTransfer -> transferJob?.cancel()
             is DatasetDetailAction.OnDeleteImages -> deleteWithUndo(action.imageIds)
             is DatasetDetailAction.OnUndoDelete -> undoDelete(action.imageIds)
+            is DatasetDetailAction.OnCommitDelete -> commitDelete(action.imageIds)
             is DatasetDetailAction.OnMoveImages -> launchEdit { repository.moveImages(datasetId, action.imageIds, action.toClassId) }
             DatasetDetailAction.OnExport -> export()
             is DatasetDetailAction.OnSaveImageSettings -> saveImageSettings(action.settings, action.convertExisting)
@@ -165,6 +180,7 @@ class DatasetDetailViewModel(
     }
 
     override fun onCleared() {
+        archive.release()
         val pending = pendingDeletes.value
         if (pending.isNotEmpty()) appScope.launch { repository.deleteImages(datasetId, pending) }
     }
@@ -213,24 +229,30 @@ class DatasetDetailViewModel(
         }
     }
 
-    /** Hides [imageIds] at once and offers undo; they're deleted for good when the offer runs out. */
+    /**
+     * Hides [imageIds] at once and offers undo. They're deleted for good when the screen reports the offer
+     * has gone, not on a timer here: the offer may wait behind other messages, or stay up longer for
+     * accessibility, and undo must work for as long as it's shown.
+     */
     private fun deleteWithUndo(imageIds: Set<Long>) {
         if (imageIds.isEmpty() || !_state.value.canEdit) return
+        undoGroups += imageIds
         pendingDeletes.update { it + imageIds }
-        undoJobs[imageIds] = viewModelScope.launch {
-            delay(UNDO_WINDOW_MS)
-            undoJobs.remove(imageIds)
-            // Unhidden only after deleting, so a failed delete shows the images again.
-            repository.deleteImages(datasetId, imageIds).onFailure { showError(it) }
-            pendingDeletes.update { it - imageIds }
-        }
         send(DatasetDetailEvent.ShowUndo(UiText.Plural(Res.plurals.message_images_deleted, imageIds.size, imageIds.size), imageIds))
     }
 
     private fun undoDelete(imageIds: Set<Long>) {
-        val job = undoJobs.remove(imageIds) ?: return
-        job.cancel()
+        if (!undoGroups.remove(imageIds)) return
         pendingDeletes.update { it - imageIds }
+    }
+
+    private fun commitDelete(imageIds: Set<Long>) {
+        if (!undoGroups.remove(imageIds)) return
+        viewModelScope.launch {
+            // Unhidden only after deleting, so a failed delete shows the images again.
+            repository.deleteImages(datasetId, imageIds).onFailure { showError(it) }
+            pendingDeletes.update { it - imageIds }
+        }
     }
 
     private fun fileAllUnknowns(destination: UnknownDestination) {
@@ -271,16 +293,28 @@ class DatasetDetailViewModel(
      */
     private fun importFolders(load: suspend () -> Result<ArchiveContents, DataError>) {
         runTransfer(TransferKind.IMPORT) {
-            val contents = when (val loaded = load()) {
-                is Result.Error -> return@runTransfer showError(loaded.error)
-                is Result.Success -> loaded.data
-            }
-            val layout = ImageFolders.analyze(contents.images)
-            val preview = ImportPreviewUi.defaultFor(layout, unknownImages = contents.unknownImages)
-            when {
-                preview.groups.isEmpty() -> showError(DataError.Archive.NO_IMAGES)
-                layout.needsChoice -> _state.update { it.copy(importPreview = preview) }
-                else -> importPreview(preview)
+            // A new pick replaces any preview still showing, and its archive.
+            _state.update { it.copy(importPreview = null) }
+            archive.release()
+            var awaitingChoice = false
+            try {
+                val contents = when (val loaded = load()) {
+                    is Result.Error -> return@runTransfer showError(loaded.error)
+                    is Result.Success -> loaded.data
+                }
+                val layout = ImageFolders.analyze(contents.images)
+                val preview = ImportPreviewUi.defaultFor(layout, unknownImages = contents.unknownImages)
+                when {
+                    preview.groups.isEmpty() -> showError(DataError.Archive.NO_IMAGES)
+                    layout.needsChoice -> {
+                        _state.update { it.copy(importPreview = preview) }
+                        awaitingChoice = true
+                    }
+                    else -> importPreview(preview)
+                }
+            } finally {
+                // An archive's images are read until the import ends, so its copy goes only then.
+                if (!awaitingChoice) archive.release()
             }
         }
     }
@@ -339,11 +373,8 @@ class DatasetDetailViewModel(
     }
 
     private companion object {
-        /** Archives are read into memory, so keep well below a typical heap. */
-        const val MAX_ARCHIVE_BYTES = 256L shl 20
-
-        /** How long a delete can be undone; a little longer than the snackbar offering it stays up. */
-        const val UNDO_WINDOW_MS = 12_000L
+        /** Archives are read from disk; zip offsets are 32-bit, so this is the most it can address. */
+        const val MAX_ARCHIVE_BYTES = (1L shl 32) - 1
     }
 }
 

@@ -3,7 +3,6 @@ package org.onedroid.dataset.data
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.buffered
-import kotlinx.io.readByteArray
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import org.onedroid.dataset.data.storage.FileDatasetRepository
@@ -15,8 +14,10 @@ import org.onedroid.dataset.domain.repository.ImageSorter
 import org.onedroid.dataset.domain.repository.ProgressListener
 import org.onedroid.dataset.domain.usecase.ClassNaming
 import org.onedroid.dataset.domain.usecase.ExportDataset
+import org.onedroid.dataset.domain.usecase.FileUnknownImages
 import org.onedroid.dataset.domain.usecase.ImageFolders
 import org.onedroid.dataset.domain.usecase.KeepUnknownImages
+import org.onedroid.dataset.domain.usecase.UnknownDestination
 import org.onedroid.dataset.testutil.FakeImageProcessor
 import org.onedroid.dataset.testutil.fakeJpeg
 import org.onedroid.dataset.testutil.source
@@ -93,7 +94,7 @@ class FileUnknownImageRepositoryTest {
         val unknowns = FileUnknownImageRepository(paths)
         unknowns.add(id, fakeJpeg("pen"), "preview".encodeToByteArray()).value()
 
-        val zip = SystemFileSystem.source(Path(ExportDataset(datasets, unknowns)(id).value().path)).buffered().use { it.readByteArray() }
+        val zip = ExportDataset(datasets, unknowns)(id).value().path
         val contents = datasets.readArchive(zip).value()
         val groups = ImageFolders.analyze(contents.images).groups(ClassNaming.TOP_FOLDER, mergeSplits = true)
         val imported = datasets.importDataset(contents.name, groups).value()
@@ -103,6 +104,21 @@ class FileUnknownImageRepositoryTest {
         assertEquals(listOf(1), requireNotNull(datasets.observeDataset(imported).first()).classes.map { it.imageIds.size })
         val back = unknowns.observe(imported).first().single()
         assertContentEquals(fakeJpeg("pen"), unknowns.read(imported, back.id).value())
+    }
+
+    @Test
+    fun unknownsThatCannotBeSavedStayUnknown() = runTest {
+        val id = newDataset()
+        val classId = requireNotNull(datasets.observeDataset(id).first()).classes.single().id
+        val unknowns = FileUnknownImageRepository(paths)
+        val junk = unknowns.add(id, "not an image".encodeToByteArray(), "preview".encodeToByteArray()).value()
+        unknowns.add(id, fakeJpeg("cup"), "preview".encodeToByteArray()).value()
+
+        val result = FileUnknownImages(datasets, unknowns)(id, unknowns.observe(id).first(), UnknownDestination.ExistingClass(classId)).value()
+        assertEquals(1, result.added)
+        assertEquals(1, result.skipped)
+        // The image that couldn't be saved isn't dropped.
+        assertEquals(listOf(junk), unknowns.observe(id).first().map { it.id })
     }
 
     /** Only previews images, which is all keeping unknowns needs. */

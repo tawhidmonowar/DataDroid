@@ -46,6 +46,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CaptureViewModelTest {
@@ -221,6 +222,23 @@ class CaptureViewModelTest {
         dataset.onAction(DatasetDetailAction.OnUndoDelete(setOf(image)))
         dataset.awaitState { state -> image in state.classes.first { it.id == red }.imageIds }
         assertIs<Result.Success<*>>(repository.readImage(id, image))
+    }
+
+    @Test
+    fun deletesAreFinalOnceTheUndoOfferGoes() = viewModelTest {
+        val (id, red) = redAndBlue()
+        val dataset = overview(id)
+        val image = dataset.awaitState { !it.loading }.classes.first { it.id == red }.imageIds.first()
+
+        dataset.onAction(DatasetDetailAction.OnDeleteImages(setOf(image)))
+        dataset.awaitState { state -> image !in state.classes.first { it.id == red }.imageIds }
+        // Still on disk while undo is on offer, however long the offer waits to be shown.
+        assertIs<Result.Success<*>>(repository.readImage(id, image))
+        dataset.onAction(DatasetDetailAction.OnCommitDelete(setOf(image)))
+        repository.observeDataset(id).first { dataset -> image !in dataset!!.classes.first { it.id == red }.imageIds }
+        // Undo after the offer has gone does nothing.
+        dataset.onAction(DatasetDetailAction.OnUndoDelete(setOf(image)))
+        assertTrue(image !in dataset.state.value.classes.first { it.id == red }.imageIds)
     }
 
     @Test

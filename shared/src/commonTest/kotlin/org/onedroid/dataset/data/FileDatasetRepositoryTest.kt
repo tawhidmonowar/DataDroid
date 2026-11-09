@@ -20,6 +20,7 @@ import org.onedroid.dataset.testutil.FakeImageProcessor
 import org.onedroid.dataset.testutil.fakeJpeg
 import org.onedroid.dataset.testutil.fakePng
 import org.onedroid.dataset.testutil.source
+import org.onedroid.dataset.testutil.tempFile
 import org.onedroid.dataset.testutil.tempStorage
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -166,7 +167,7 @@ class FileDatasetRepositoryTest {
         assertEquals(DatasetMetadata("Animal Dataset", listOf("Class_1"), 1, unknownFolder = "unknown", unknownImageCount = 2), metadata)
 
         // Importing keeps them out of the classes.
-        val contents = repository.readArchive(zip).value()
+        val contents = repository.readArchive(tempFile(zip)).value()
         assertEquals("Animal Dataset", contents.name)
         assertEquals(listOf("Class_1_0001.jpg"), contents.images.map { it.name })
         assertEquals(listOf("u1", "u2"), contents.unknownImages.map { it.read().decodeToString().drop(4) })
@@ -185,7 +186,7 @@ class FileDatasetRepositoryTest {
         val (first, second) = dataset(id).classes
         repository.addImages(id, first.id, listOf(source(fakeJpeg("a")), source(fakeJpeg("b")))).value()
         repository.addImages(id, second.id, listOf(source(fakePng("c")))).value()
-        val zip = SystemFileSystem.source(Path(repository.exportDataset(id).value().path)).buffered().use { it.readByteArray() }
+        val zip = repository.exportDataset(id).value().path
 
         val contents = repository.readArchive(zip).value()
         val groups = ImageFolders.analyze(contents.images).groups(ClassNaming.TOP_FOLDER, mergeSplits = true)
@@ -197,11 +198,11 @@ class FileDatasetRepositoryTest {
 
     @Test
     fun importRejectsNonZipAndZipWithoutClassFolders() = runTest {
-        assertEquals(DataError.Archive.NOT_A_ZIP, (repository.readArchive("nope".encodeToByteArray()) as Result.Error).error)
+        assertEquals(DataError.Archive.NOT_A_ZIP, (repository.readArchive(tempFile("nope".encodeToByteArray())) as Result.Error).error)
 
         val buffer = kotlinx.io.Buffer()
         org.onedroid.dataset.data.archive.ZipWriter(buffer).apply { add("notes.txt", "x".encodeToByteArray()); finish() }
-        assertEquals(DataError.Archive.NO_IMAGES, (repository.readArchive(buffer.readByteArray()) as Result.Error).error)
+        assertEquals(DataError.Archive.NO_IMAGES, (repository.readArchive(tempFile(buffer.readByteArray())) as Result.Error).error)
 
         val result = repository.importDataset("Empty", emptyMap())
         assertIs<Result.Error<*>>(result)
@@ -217,6 +218,18 @@ class FileDatasetRepositoryTest {
             add("My_Pets/cover.jpg", fakeJpeg("2"))
             finish()
         }
-        assertEquals("My Pets", repository.readArchive(buffer.readByteArray()).value().name)
+        assertEquals("My Pets", repository.readArchive(tempFile(buffer.readByteArray())).value().name)
+    }
+
+    @Test
+    fun oversizedMetadataIsIgnored() = runTest {
+        val buffer = kotlinx.io.Buffer()
+        org.onedroid.dataset.data.archive.ZipWriter(buffer).apply {
+            add("My_Pets/metadata.json", ("""{"name":"Huge"}""" + " ".repeat(70_000)).encodeToByteArray())
+            add("My_Pets/cat/1.jpg", fakeJpeg("1"))
+            add("My_Pets/dog/1.jpg", fakeJpeg("2"))
+            finish()
+        }
+        assertEquals("My Pets", repository.readArchive(tempFile(buffer.readByteArray())).value().name)
     }
 }

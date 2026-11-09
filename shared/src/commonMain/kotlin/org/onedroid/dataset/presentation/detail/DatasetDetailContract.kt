@@ -80,6 +80,9 @@ sealed interface DatasetDetailAction {
     /** Deletes images, with undo offered for a few seconds. */
     data class OnDeleteImages(val imageIds: Set<Long>) : DatasetDetailAction
     data class OnUndoDelete(val imageIds: Set<Long>) : DatasetDetailAction
+
+    /** The undo offer for a delete has gone without being taken, so the images are deleted for good. */
+    data class OnCommitDelete(val imageIds: Set<Long>) : DatasetDetailAction
     data class OnMoveImages(val imageIds: Set<Long>, val toClassId: Int) : DatasetDetailAction
     data object OnExport : DatasetDetailAction
 

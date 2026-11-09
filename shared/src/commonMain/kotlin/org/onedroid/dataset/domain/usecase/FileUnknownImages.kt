@@ -21,9 +21,9 @@ sealed interface UnknownDestination {
 }
 
 /**
- * Saves unknown images into a class and takes each off the unknowns once it's saved. Images are saved in
- * order, so if saving stops partway (cancelled or failed), the ones already saved still leave the unknowns
- * and the rest stay, rather than being saved twice or lost.
+ * Saves unknown images into a class and takes each off the unknowns once it's saved. If saving stops
+ * partway (cancelled or failed), the ones already saved still leave the unknowns and the rest stay, and an
+ * image that couldn't be saved stays too, so none is saved twice or lost.
  */
 class FileUnknownImages(
     private val repository: DatasetRepository,
@@ -45,15 +45,12 @@ class FileUnknownImages(
         val sources = images.map { image ->
             ImageSource { unknownImages.read(datasetId, image.id).getOrNull() ?: error("Unknown image ${image.id} is gone") }
         }
-        // Counts images saved, or skipped as undecodable, from the start of the list.
-        var handled = 0
+        // Only images actually saved leave the unknowns: a skipped one (unreadable, or its class gone) stays.
+        val saved = HashSet<Long>()
         try {
-            return repository.addImages(datasetId, classId, sources) { done, total ->
-                handled = done
-                onProgress(done, total)
-            }
+            return repository.addImages(datasetId, classId, sources, onProgress, onSaved = { saved += images[it].id })
         } finally {
-            withContext(NonCancellable) { unknownImages.remove(datasetId, images.take(handled).map { it.id }.toSet()) }
+            withContext(NonCancellable) { unknownImages.remove(datasetId, saved) }
         }
     }
 }

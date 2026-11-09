@@ -38,7 +38,7 @@ data class ImageSettings(
 }
 
 enum class ResizeMode {
-    /** Keep the image's own dimensions. */
+    /** Keep the image's own dimensions; when re-encoding, ones over about 16 MP are scaled down to it. */
     ORIGINAL,
 
     /** Scale down, keeping the aspect ratio, so the longest side is at most the size. */

@@ -11,7 +11,9 @@ import org.onedroid.dataset.core.platform.image.encodeJpeg
 import org.onedroid.dataset.core.platform.image.encodePng
 import org.onedroid.dataset.core.platform.image.encodeWebp
 import org.onedroid.dataset.core.platform.image.imageDimensions
+import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /** An image written in some format; [extension] names the format. */
 class EncodedImage(val bytes: ByteArray, val extension: String)
@@ -39,8 +41,8 @@ class PlatformImageProcessor : ImageProcessor {
 
     override fun convert(bytes: ByteArray, settings: ImageSettings): EncodedImage {
         val image = when (settings.resize) {
-            ResizeMode.ORIGINAL -> decodeFitted(bytes, Int.MAX_VALUE)
-            ResizeMode.FIT -> decodeFitted(bytes, settings.size)
+            ResizeMode.ORIGINAL -> decodeFitted(bytes, maxSideWithinPixelLimit(bytes))
+            ResizeMode.FIT -> decodeFitted(bytes, min(settings.size, maxSideWithinPixelLimit(bytes)))
             ResizeMode.SQUARE -> {
                 val (width, height) = imageDimensions(bytes)
                 decodeSquare(bytes, min(settings.size, min(width, height)))
@@ -48,6 +50,17 @@ class PlatformImageProcessor : ImageProcessor {
         }
         val format = settings.format.takeIf { it != OutputFormat.ORIGINAL } ?: sourceFormat(bytes)
         return EncodedImage(image.encode(format, settings.quality), requireNotNull(format.extension))
+    }
+
+    /**
+     * The longest side [bytes] can be converted at while staying within [MAX_PIXELS], so a very large photo
+     * is scaled down instead of needing several full-size pixel buffers, which runs out of memory on phones.
+     */
+    private fun maxSideWithinPixelLimit(bytes: ByteArray): Int {
+        val (width, height) = imageDimensions(bytes)
+        val pixels = width.toLong() * height
+        if (pixels <= MAX_PIXELS) return Int.MAX_VALUE
+        return (max(width, height) * sqrt(MAX_PIXELS.toDouble() / pixels)).toInt().coerceAtLeast(1)
     }
 
     /** The format an image is re-encoded in when it should keep its own: its own if writable, else JPEG. */
@@ -62,7 +75,10 @@ class PlatformImageProcessor : ImageProcessor {
         OutputFormat.JPEG, OutputFormat.ORIGINAL -> encodeJpeg(quality)
     }
 
-    private companion object {
-        const val THUMBNAIL_QUALITY = 85
+    companion object {
+        private const val THUMBNAIL_QUALITY = 85
+
+        /** About 16 MP: more than most phone photos, and about 64 MB per decoded copy. */
+        const val MAX_PIXELS = 16_000_000L
     }
 }

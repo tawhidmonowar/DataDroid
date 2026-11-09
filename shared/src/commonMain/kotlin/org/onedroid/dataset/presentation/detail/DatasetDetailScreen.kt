@@ -52,6 +52,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -110,6 +112,14 @@ import org.onedroid.dataset.resources.images_count
 private sealed interface PickTarget {
     data class Class(val classId: Int) : PickTarget
     data object Dataset : PickTarget
+
+    companion object {
+        /** Saved as the class id, or -1 for the whole dataset. */
+        val Saver: Saver<PickTarget, Int> = Saver(
+            save = { (it as? Class)?.classId ?: -1 },
+            restore = { if (it >= 0) Class(it) else Dataset },
+        )
+    }
 }
 
 @Composable
@@ -127,7 +137,8 @@ fun DatasetDetailRoot(
     val currentState by rememberUpdatedState(state)
 
     // One launcher per picker for the whole screen, so it survives while the system picker is open.
-    var pickTarget by remember { mutableStateOf<PickTarget>(PickTarget.Dataset) }
+    // Saved, as the system picker can outlive this activity (rotation, or the process being reclaimed).
+    var pickTarget by rememberSaveable(stateSaver = PickTarget.Saver) { mutableStateOf<PickTarget>(PickTarget.Dataset) }
     val pickImages = rememberImagePicker { images ->
         (pickTarget as? PickTarget.Class)?.let { viewModel.onAction(DatasetDetailAction.OnImagesPicked(it.classId, images)) }
     }
@@ -145,12 +156,20 @@ fun DatasetDetailRoot(
             is DatasetDetailEvent.ShareFile -> sharer.share(event.file.path, event.file.mimeType)
             is DatasetDetailEvent.ShowMessage -> scope.launch { snackbar.showSnackbar(event.message.asStringAsync()) }
             is DatasetDetailEvent.ShowUndo -> scope.launch {
-                val result = snackbar.showSnackbar(
-                    message = event.message.asStringAsync(),
-                    actionLabel = getString(Res.string.action_undo),
-                    duration = SnackbarDuration.Long,
-                )
-                if (result == SnackbarResult.ActionPerformed) viewModel.onAction(DatasetDetailAction.OnUndoDelete(event.imageIds))
+                var undone = false
+                try {
+                    val result = snackbar.showSnackbar(
+                        message = event.message.asStringAsync(),
+                        actionLabel = getString(Res.string.action_undo),
+                        duration = SnackbarDuration.Long,
+                    )
+                    undone = result == SnackbarResult.ActionPerformed
+                } finally {
+                    // Also when the offer is cut short, e.g. by rotation, so a delete never stays pending.
+                    viewModel.onAction(
+                        if (undone) DatasetDetailAction.OnUndoDelete(event.imageIds) else DatasetDetailAction.OnCommitDelete(event.imageIds)
+                    )
+                }
             }
             is DatasetDetailEvent.FocusClass -> scope.launch {
                 // Let the new class reach the list before scrolling to it.

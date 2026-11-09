@@ -210,7 +210,7 @@
     <string name="resize_original">Original</string>
     <string name="resize_fit">Fit</string>
     <string name="resize_square">Square</string>
-    <string name="resize_original_hint">Images keep their own dimensions.</string>
+    <string name="resize_original_hint">Images keep their own dimensions. When converting format, very large ones (over 16 MP) are scaled down to 16 MP.</string>
     <string name="resize_fit_hint">Scaled down so the longest side is at most %1$d px, keeping the aspect ratio.</string>
     <string name="resize_square_hint">Center-cropped to a square and scaled down to %1$d × %1$d px.</string>
     <string name="size_px">%1$d px</string>
