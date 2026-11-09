@@ -1,4 +1,10 @@
-# DataDroid
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/DataDroid%20Dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/DataDroid%20Light.png">
+    <img alt="DataDroid: build image datasets on your phone, with AI on-device" src="assets/DataDroid%20Light.png" width="640">
+  </picture>
+</p>
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.20-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Compose Multiplatform](https://img.shields.io/badge/Compose_Multiplatform-1.12.1-4285F4?logo=jetpackcompose&logoColor=white)](https://www.jetbrains.com/compose-multiplatform/)
