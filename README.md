@@ -12,8 +12,6 @@
 [![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)](#run-on-android)
 [![iOS](https://img.shields.io/badge/iOS-18.2%2B-000000?logo=apple&logoColor=white)](#run-on-ios)
 [![On-device AI](https://img.shields.io/badge/AI-on--device-FF6F00?logo=tensorflow&logoColor=white)](#features)
-[![License](https://img.shields.io/badge/license-Apache_2.0-blue)](LICENSE)
-[![Website](https://img.shields.io/badge/website-DataDroid-1967D2)](https://tawhidmonowar.github.io/DataDroid/)
 
 DataDroid is a cross-platform, on-device image dataset studio built with Kotlin Multiplatform and Compose
 Multiplatform. Create image classification datasets on Android and iOS, capture or import images per class,
