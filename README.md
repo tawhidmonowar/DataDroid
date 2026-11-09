@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/DataDroid%20Dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/DataDroid%20Light.png">
-    <img alt="DataDroid: build image datasets on your phone, with AI on-device" src="assets/DataDroid%20Light.png" width="640">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/DataDroid%20Dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/DataDroid%20Light.png">
+    <img alt="DataDroid: build image datasets on your phone, with AI on-device" src="docs/assets/DataDroid%20Light.png" width="640">
   </picture>
 </p>
 
@@ -210,4 +210,5 @@ icon paths (Apache 2.0). See [NOTICE](NOTICE) for details and sources.
 **Tawhid Monowar** - *Computer Science & Engineering Student* <br>
 [LinkedIn](https://www.linkedin.com/in/tawhidmonowar) | [Portfolio](https://tawhidmonowar.github.io)  | [Email](mailto:tawhidmonowar@duck.com)
 
-The contest essay is in [ESSAY.md](docs/ESSAY.md).
+The contest essay is in [ESSAY.md](docs/ESSAY.md), and the paper on the auto-sort matcher is in
+[docs/paper/paper.md](docs/paper/paper.md).
