@@ -23,6 +23,7 @@ import kotlinx.io.writeFloat
 import org.onedroid.dataset.domain.DataError
 import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.domain.getOrNull
+import org.onedroid.dataset.data.archive.Crc32
 import org.onedroid.dataset.data.image.ImageProcessor
 import org.onedroid.dataset.data.storage.DatasetFiles
 import org.onedroid.dataset.data.storage.StoragePaths
@@ -41,7 +42,8 @@ import org.onedroid.dataset.core.platform.ml.SharedBackbone
 /**
  * Sorts images by comparing MobileNet embeddings. Each image's embedding is cached in its dataset's
  * `embeddings.bin` (appended as images are embedded, so it goes when the dataset does) and kept in memory
- * for the dataset sorted most recently.
+ * for the dataset sorted most recently. Images embedded just before they're saved, as auto-sort does, are
+ * recognised by their bytes when they turn up in the dataset, so they aren't embedded a second time.
  */
 class EmbeddingImageSorter(
     private val paths: StoragePaths,
@@ -64,6 +66,16 @@ class EmbeddingImageSorter(
     /** Images that couldn't be read or decoded, so they aren't retried on every change. */
     private val unreadable = HashSet<Long>()
 
+    /** Guarded by [mutex]: refits the cached dataset's matcher, reusing work from the last fit. */
+    private var fitter = ClassMatcher.Fitter()
+
+    /** Serialises fits, which run off [mutex] as they take a while. */
+    private val fitMutex = Mutex()
+
+    /** Embeddings of images about to be saved, by their bytes, oldest first. Guarded by [recentMutex]. */
+    private val recent = LinkedHashMap<ContentKey, FloatArray>()
+    private val recentMutex = Mutex()
+
     override suspend fun matcherFor(dataset: Dataset, onProgress: ProgressListener): Result<ClassMatcher, DataError.Sorting> {
         val extractor = extractor() ?: return Result.Error(DataError.Sorting.MODEL_UNAVAILABLE)
         val imageIds = dataset.classes.flatMap { it.imageIds }
@@ -83,16 +95,26 @@ class EmbeddingImageSorter(
                 onProgress(done, missing.size)
             }
         }
-        return mutex.withLock {
+        val (byClass, classFitter) = mutex.withLock {
             compactIfStale(dataset.id, imageIds.toSet())
-            val byClass = dataset.classes.associate { c -> c.id to c.imageIds.mapNotNull { cache[it] } }
-            Result.Success(ClassMatcher.fit(byClass))
+            dataset.classes.associate { c -> c.id to c.imageIds.mapNotNull { cache[it] } } to fitter
         }
+        // Fitting compares each class's images with each other, too slow for the caller's (often main) thread.
+        return Result.Success(withContext(Dispatchers.Default) { fitMutex.withLock { classFitter.fit(byClass) } })
     }
 
-    override suspend fun embed(image: ByteArray): Result<FloatArray?, DataError.Sorting> {
+    override suspend fun embed(image: ByteArray, saving: Boolean): Result<FloatArray?, DataError.Sorting> {
         val extractor = extractor() ?: return Result.Error(DataError.Sorting.MODEL_UNAVAILABLE)
-        return Result.Success(embedBytes(extractor, image))
+        val embedding = embedBytes(extractor, image)
+        if (saving && embedding != null) {
+            val key = withContext(Dispatchers.Default) { ContentKey.of(image) }
+            recentMutex.withLock {
+                recent.remove(key)
+                recent[key] = embedding
+                if (recent.size > RECENT_CAPACITY) recent.remove(recent.keys.first())
+            }
+        }
+        return Result.Success(embedding)
     }
 
     override suspend fun preview(image: ByteArray): ByteArray? = withContext(Dispatchers.Default) {
@@ -103,7 +125,14 @@ class EmbeddingImageSorter(
 
     private suspend fun embedStored(extractor: FeatureExtractor, datasetId: String, imageId: Long): FloatArray? {
         val bytes = repository.readImage(datasetId, imageId).getOrNull() ?: return null
-        return embedBytes(extractor, bytes)
+        return takeRecent(bytes) ?: embedBytes(extractor, bytes)
+    }
+
+    /** The embedding [embed] kept for [bytes], if it kept one; each is handed out once, then lives in the cache. */
+    private suspend fun takeRecent(bytes: ByteArray): FloatArray? {
+        if (recentMutex.withLock { recent.isEmpty() }) return null
+        val key = withContext(Dispatchers.Default) { ContentKey.of(bytes) }
+        return recentMutex.withLock { recent.remove(key) }
     }
 
     private suspend fun embedBytes(extractor: FeatureExtractor, bytes: ByteArray): FloatArray? {
@@ -160,6 +189,7 @@ class EmbeddingImageSorter(
         cachedDatasetId = datasetId
         cache = HashMap()
         unreadable.clear()
+        fitter = ClassMatcher.Fitter()
         fileRecords = 0
         withContext(ioDispatcher) {
             val file = cacheFile(datasetId)
@@ -217,8 +247,21 @@ class EmbeddingImageSorter(
         null
     }
 
+    /**
+     * Identifies an image by its bytes: their size and two independent hashes, so a mix-up would need both to
+     * collide at once.
+     */
+    private data class ContentKey(val size: Int, val crc: Int, val hash: Int) {
+        companion object {
+            fun of(bytes: ByteArray) = ContentKey(bytes.size, Crc32.of(bytes), bytes.contentHashCode())
+        }
+    }
+
     private companion object {
         const val CACHE_FILE = "embeddings.bin"
+
+        /** Embeddings kept for images about to be saved: enough for a long burst or a big pick, about 2 MB. */
+        const val RECENT_CAPACITY = 512
 
         /** "DDE1": DataDroid embeddings, format 1. */
         const val MAGIC = 0x44444531

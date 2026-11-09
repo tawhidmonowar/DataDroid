@@ -88,7 +88,6 @@ kotlin {
             implementation(libs.androidx.camera.compose)
             implementation(libs.koin.android)
             implementation(libs.compose.uiToolingPreview)
-            implementation(libs.compose.uiTooling)
         }
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
@@ -122,6 +121,3 @@ compose.resources {
     packageOfResClass = "org.onedroid.dataset.resources"
 }
 
-dependencies {
-    androidRuntimeClasspath(libs.compose.uiTooling)
-}

@@ -17,10 +17,13 @@ import org.onedroid.dataset.domain.DataError
 import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.domain.onFailure
 import org.onedroid.dataset.domain.onSuccess
+import org.onedroid.dataset.presentation.components.PickedArchive
 import org.onedroid.dataset.presentation.components.UiText
 import org.onedroid.dataset.presentation.components.toUiText
 import org.onedroid.dataset.domain.repository.DatasetRepository
+import org.onedroid.dataset.domain.usecase.ExportDataset
 import org.onedroid.dataset.domain.usecase.ImageConversions
+import org.onedroid.dataset.domain.usecase.KeepUnknownImages
 import org.onedroid.dataset.domain.usecase.ImageFolders
 import org.onedroid.dataset.core.platform.picker.PickedFile
 import org.onedroid.dataset.presentation.components.ImportPreviewUi
@@ -32,6 +35,8 @@ import org.onedroid.dataset.resources.message_dataset_imported
 class DatasetListViewModel(
     private val repository: DatasetRepository,
     private val conversions: ImageConversions,
+    private val exportDataset: ExportDataset,
+    private val keepUnknownImages: KeepUnknownImages,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DatasetListState())
@@ -41,6 +46,7 @@ class DatasetListViewModel(
     val events = _events.receiveAsFlow()
 
     private var transferJob: Job? = null
+    private val archive = PickedArchive()
 
     init {
         combine(repository.observeDatasets(), conversions.progress) { datasets, progress ->
@@ -67,7 +73,10 @@ class DatasetListViewModel(
             is DatasetListAction.OnImportNamingChange -> _state.update { it.copy(importPreview = it.importPreview?.copy(naming = action.naming)) }
             is DatasetListAction.OnImportMergeSplitsChange -> _state.update { it.copy(importPreview = it.importPreview?.copy(mergeSplits = action.merge)) }
             DatasetListAction.OnConfirmImport -> confirmImport()
-            DatasetListAction.OnDismissImport -> _state.update { it.copy(importPreview = null) }
+            DatasetListAction.OnDismissImport -> {
+                _state.update { it.copy(importPreview = null) }
+                archive.release()
+            }
         }
     }
 
@@ -80,43 +89,66 @@ class DatasetListViewModel(
     }
 
     private fun export(id: String) = runTransfer(TransferKind.EXPORT) {
-        repository.exportDataset(id, onProgress = ::onProgress)
+        exportDataset(id, onProgress = ::onProgress)
             .onSuccess { _events.send(DatasetListEvent.ShareFile(it)) }
             .onFailure { showError(it) }
     }
 
     private fun import(file: PickedFile) = runTransfer(TransferKind.IMPORT) {
-        val bytes = try {
-            file.readBytes(maxSize = MAX_ARCHIVE_BYTES)
+        // A new pick replaces any preview still showing, and its archive.
+        _state.update { it.copy(importPreview = null) }
+        archive.release()
+        val path = try {
+            file.localPath(maxSize = MAX_ARCHIVE_BYTES)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             showError(if (e is IllegalArgumentException) DataError.Archive.TOO_LARGE else DataError.Archive.UNKNOWN)
             return@runTransfer
         }
-        val contents = when (val read = repository.readArchive(bytes)) {
-            is Result.Error -> return@runTransfer showError(read.error)
-            is Result.Success -> read.data
-        }
-        val layout = ImageFolders.analyze(contents.images)
-        val preview = ImportPreviewUi.defaultFor(layout, contents.name)
-        when {
-            preview.groups.isEmpty() -> showError(DataError.Archive.NO_IMAGES)
-            // Ask how folders become classes; the import continues from OnConfirmImport.
-            layout.needsChoice -> _state.update { it.copy(importPreview = preview) }
-            else -> importDataset(preview)
+        archive.hold(path)
+        var awaitingChoice = false
+        try {
+            val contents = when (val read = repository.readArchive(path)) {
+                is Result.Error -> return@runTransfer showError(read.error)
+                is Result.Success -> read.data
+            }
+            val layout = ImageFolders.analyze(contents.images)
+            val preview = ImportPreviewUi.defaultFor(layout, contents.name, contents.unknownImages)
+            when {
+                preview.groups.isEmpty() -> showError(DataError.Archive.NO_IMAGES)
+                // Ask how folders become classes; the import continues from OnConfirmImport.
+                layout.needsChoice -> {
+                    _state.update { it.copy(importPreview = preview) }
+                    awaitingChoice = true
+                }
+                else -> importDataset(preview)
+            }
+        } finally {
+            if (!awaitingChoice) archive.release()
         }
     }
 
     private fun confirmImport() {
         val preview = _state.value.importPreview ?: return
         _state.update { it.copy(importPreview = null) }
-        runTransfer(TransferKind.IMPORT) { importDataset(preview) }
+        runTransfer(TransferKind.IMPORT) {
+            try {
+                importDataset(preview)
+            } finally {
+                archive.release()
+            }
+        }
+    }
+
+    override fun onCleared() {
+        archive.release()
     }
 
     private suspend fun importDataset(preview: ImportPreviewUi) {
         repository.importDataset(preview.datasetName, preview.groups, onProgress = ::onProgress)
             .onSuccess { id ->
+                keepUnknownImages(id, preview.unknownImages).onFailure { showError(it) }
                 _events.send(DatasetListEvent.ShowMessage(UiText.Resource(Res.string.message_dataset_imported)))
                 _events.send(DatasetListEvent.NavigateToDataset(id))
             }
@@ -146,7 +178,7 @@ class DatasetListViewModel(
     }
 
     private companion object {
-        /** Archives are read into memory, so keep well below a typical heap. */
-        const val MAX_ARCHIVE_BYTES = 256L shl 20
+        /** Archives are read from disk; zip offsets are 32-bit, so this is the most it can address. */
+        const val MAX_ARCHIVE_BYTES = (1L shl 32) - 1
     }
 }

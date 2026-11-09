@@ -45,13 +45,15 @@ import org.onedroid.dataset.resources.import_preview_title
 
 /**
  * A folder or zip whose layout is ambiguous (nested folders, or train/val/test splits), waiting for the
- * user to choose how its folders become classes. [datasetName] is the suggested name of a new dataset.
+ * user to choose how its folders become classes. [datasetName] is the suggested name of a new dataset, and
+ * [unknownImages] are images a DataDroid export kept apart as unknown, to be added to the unknowns.
  */
 data class ImportPreviewUi(
     val layout: FolderLayout,
     val naming: ClassNaming = ClassNaming.TOP_FOLDER,
     val mergeSplits: Boolean = layout.splitFolders.isNotEmpty(),
     val datasetName: String? = null,
+    val unknownImages: List<ImageSource> = emptyList(),
 ) {
     val groups: Map<String, List<ImageSource>> = layout.groups(naming, mergeSplits)
 
@@ -60,7 +62,8 @@ data class ImportPreviewUi(
 
     companion object {
         /** How [layout] is imported when there's nothing to ask: top folders, splits merged. */
-        fun defaultFor(layout: FolderLayout, datasetName: String? = null) = ImportPreviewUi(layout, datasetName = datasetName)
+        fun defaultFor(layout: FolderLayout, datasetName: String? = null, unknownImages: List<ImageSource> = emptyList()) =
+            ImportPreviewUi(layout, datasetName = datasetName, unknownImages = unknownImages)
     }
 }
 

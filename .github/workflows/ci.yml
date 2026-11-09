@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android tests, lint and release build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests
+        run: ./gradlew :shared:testAndroidHostTest --console=plain
+      - name: Lint
+        run: ./gradlew :androidApp:lintRelease --console=plain
+      - name: Release build
+        run: ./gradlew :androidApp:assembleRelease --console=plain
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          path: |
+            shared/build/reports/tests/
+            androidApp/build/reports/lint-results-release.html
+          if-no-files-found: ignore
+
+  ios:
+    name: iOS simulator tests
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Shared tests on the iOS simulator
+        run: ./gradlew :shared:iosSimulatorArm64Test --console=plain

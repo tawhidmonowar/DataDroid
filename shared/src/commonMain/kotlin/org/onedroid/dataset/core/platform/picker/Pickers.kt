@@ -4,9 +4,13 @@ import androidx.compose.runtime.Composable
 import org.onedroid.dataset.domain.model.ImageSource
 import org.onedroid.dataset.domain.model.LabeledImage
 
-/** A file the user picked; read lazily, failing past [maxSize] bytes. */
+/** A file the user picked, copied into the app only when asked. */
 fun interface PickedFile {
-    suspend fun readBytes(maxSize: Long): ByteArray
+    /**
+     * Returns the path of a local copy of the file, for the caller to delete once done with it. Throws
+     * [IllegalArgumentException] if it passes [maxSize] bytes.
+     */
+    suspend fun localPath(maxSize: Long): String
 }
 
 /** A folder the user picked; [images] walks it lazily and lists every image file inside. */

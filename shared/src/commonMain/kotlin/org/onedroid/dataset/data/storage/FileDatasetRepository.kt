@@ -28,6 +28,7 @@ import org.onedroid.dataset.domain.DataError
 import org.onedroid.dataset.domain.EmptyResult
 import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.data.archive.ArchiveImporter
+import org.onedroid.dataset.data.archive.FileZipSource
 import org.onedroid.dataset.data.archive.DatasetExporter
 import org.onedroid.dataset.data.archive.ZipTooLargeException
 import org.onedroid.dataset.data.image.ImageFormat
@@ -130,8 +131,9 @@ class FileDatasetRepository(
         classId: Int,
         sources: List<ImageSource>,
         onProgress: ProgressListener,
+        onSaved: (index: Int) -> Unit,
     ): Result<ImportResult, DataError.Local> = catching {
-        addAll(datasetId, sources.map { classId to it }, onProgress)
+        addAll(datasetId, sources.map { classId to it }, onProgress, onSaved)
     }
 
     override suspend fun importLabeledImages(
@@ -176,7 +178,11 @@ class FileDatasetRepository(
         withContext(ioDispatcher) { files.readOrNull(files.thumbnailFile(datasetId, imageId)) } ?: throw NotFoundException()
     }
 
-    override suspend fun exportDataset(datasetId: String, onProgress: ProgressListener): Result<ExportedFile, DataError> {
+    override suspend fun exportDataset(
+        datasetId: String,
+        unknownImages: List<ImageSource>,
+        onProgress: ProgressListener,
+    ): Result<ExportedFile, DataError> {
         val record = when (val snapshot = catching { locked { current(datasetId) } }) {
             is Result.Error -> return snapshot
             is Result.Success -> snapshot.data
@@ -193,6 +199,7 @@ class FileDatasetRepository(
                     record = record,
                     target = target,
                     readImage = { image -> files.readOrNull(files.imageFile(datasetId, image)) },
+                    unknownImages = unknownImages,
                     onProgress = onProgress,
                 )
                 ExportedFile(target.toString(), DatasetExporter.MIME_TYPE)
@@ -200,9 +207,9 @@ class FileDatasetRepository(
         }
     }
 
-    override suspend fun readArchive(archive: ByteArray): Result<ArchiveContents, DataError.Archive> {
+    override suspend fun readArchive(path: String): Result<ArchiveContents, DataError.Archive> {
         val contents = try {
-            withContext(Dispatchers.Default) { ArchiveImporter.read(archive) }
+            withContext(Dispatchers.IO) { ArchiveImporter.read(FileZipSource(path)) }
         } catch (e: ZipTooLargeException) {
             return Result.Error(DataError.Archive.TOO_LARGE)
         } catch (e: IllegalArgumentException) {
@@ -335,6 +342,7 @@ class FileDatasetRepository(
         datasetId: String,
         items: List<Pair<Int, ImageSource>>,
         onProgress: ProgressListener,
+        onSaved: (index: Int) -> Unit = {},
     ): ImportResult {
         var added = 0
         var skipped = 0
@@ -359,7 +367,9 @@ class FileDatasetRepository(
                         commit(datasetId, updated, persist = !unsaved)
                         true
                     }
+                    val index = added + skipped
                     if (committed) added++ else skipped++
+                    if (committed) onSaved(index)
                     onProgress(added + skipped, items.size)
                 }
             }
@@ -505,11 +515,6 @@ class FileDatasetRepository(
         Result.Error(if (e.isDiskFull()) DataError.Local.DISK_FULL else DataError.Local.UNKNOWN)
     } catch (e: Exception) {
         Result.Error(if (e.isDiskFull()) DataError.Local.DISK_FULL else DataError.Local.UNKNOWN)
-    }
-
-    private fun Throwable.isDiskFull(): Boolean {
-        val text = generateSequence(this) { it.cause }.mapNotNull { it.message }.joinToString(" ")
-        return "ENOSPC" in text || "No space left" in text
     }
 
     private class NotFoundException : Exception()

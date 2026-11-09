@@ -31,7 +31,10 @@ actual fun decodeFitted(bytes: ByteArray, maxSide: Int): RgbImage {
     return fitted.toRgbImage()
 }
 
-/** Decodes at the largest power-of-two subsampling that keeps [ratio] of the full size at least 1. */
+/**
+ * Decodes at the largest power-of-two subsampling that keeps [ratio] of the full size at least 1, or more
+ * if needed to stay within [MAX_DECODE_PIXELS], so a huge photo never needs a full-size bitmap.
+ */
 private inline fun decodeSampled(bytes: ByteArray, ratio: (width: Int, height: Int) -> Int): Bitmap {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
@@ -39,6 +42,7 @@ private inline fun decodeSampled(bytes: ByteArray, ratio: (width: Int, height: I
     val limit = ratio(bounds.outWidth, bounds.outHeight)
     var sampleSize = 1
     while (sampleSize * 2 <= limit) sampleSize *= 2
+    while ((bounds.outWidth.toLong() / sampleSize) * (bounds.outHeight.toLong() / sampleSize) > MAX_DECODE_PIXELS) sampleSize *= 2
     val options = BitmapFactory.Options().apply {
         inSampleSize = sampleSize
         inPreferredConfig = Bitmap.Config.ARGB_8888
@@ -111,3 +115,5 @@ private fun RgbImage.compress(format: Bitmap.CompressFormat, quality: Int): Byte
     }
 }
 
+/** About 64 MB as ARGB; matches ImageProcessor's limit for full-size conversions. */
+private const val MAX_DECODE_PIXELS = 16_000_000L

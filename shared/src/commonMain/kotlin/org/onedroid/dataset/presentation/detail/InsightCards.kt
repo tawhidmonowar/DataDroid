@@ -63,10 +63,13 @@ import org.onedroid.dataset.resources.export_button
 import org.onedroid.dataset.resources.export_description
 import org.onedroid.dataset.resources.export_empty_classes_note
 import org.onedroid.dataset.resources.export_title
+import org.onedroid.dataset.resources.export_unknown_note
 import org.onedroid.dataset.resources.images_count
 import org.onedroid.dataset.resources.stat_average
 import org.onedroid.dataset.resources.stat_classes
 import org.onedroid.dataset.resources.stat_images
+import org.onedroid.dataset.domain.usecase.RECOMMENDED_IMAGES_PER_CLASS
+import org.onedroid.dataset.resources.balance_classes_ready
 import kotlin.math.roundToInt
 
 /**
@@ -78,9 +81,10 @@ fun BalanceSummaryStrip(balance: ClassBalance, onClick: () -> Unit, modifier: Mo
     Surface(onClick = onClick, color = MaterialTheme.colorScheme.surface, modifier = modifier.fillMaxWidth()) {
         Column {
             Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                val ready = balance.classes.count { it.count >= RECOMMENDED_IMAGES_PER_CLASS }
                 Text(
                     pluralStringResource(Res.plurals.images_count, balance.totalImages, balance.totalImages) + " · " +
-                        pluralStringResource(Res.plurals.classes_count, balance.classes.size, balance.classes.size),
+                        stringResource(Res.string.balance_classes_ready, ready, balance.classes.size),
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -204,6 +208,7 @@ private fun BalanceBar(name: String, count: Int, share: Float, fill: Float, colo
 fun ExportCard(
     datasetName: String,
     classes: List<ClassUi>,
+    unknownCount: Int,
     enabled: Boolean,
     onExport: () -> Unit,
     modifier: Modifier = Modifier,
@@ -211,15 +216,16 @@ fun ExportCard(
     ElevatedCard(modifier.fillMaxWidth()) {
         CardHeader(AppIcons.Download, stringResource(Res.string.export_title))
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        ExportContent(datasetName, classes, enabled, onExport, Modifier.padding(16.dp))
+        ExportContent(datasetName, classes, unknownCount, enabled, onExport, Modifier.padding(16.dp))
     }
 }
 
-/** The body of [ExportCard]. */
+/** The body of [ExportCard]; [unknownCount] images auto-sort couldn't place go in a folder of their own. */
 @Composable
 fun ExportContent(
     datasetName: String,
     classes: List<ClassUi>,
+    unknownCount: Int,
     enabled: Boolean,
     onExport: () -> Unit,
     modifier: Modifier = Modifier,
@@ -241,7 +247,18 @@ fun ExportContent(
                     val count = nonEmpty[index].imageIds.size
                     TreeLine("$branch── $folder/  (${pluralStringResource(Res.plurals.images_count, count, count)})")
                 }
+                if (unknownCount > 0) {
+                    val folder = ExportNaming.unknownFolder(ExportNaming.rootFolder(datasetName))
+                    TreeLine("$folder/  (${pluralStringResource(Res.plurals.images_count, unknownCount, unknownCount)})", bold = true)
+                }
             }
+        }
+        if (unknownCount > 0) {
+            Text(
+                stringResource(Res.string.export_unknown_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         if (nonEmpty.size < classes.size) {
             Text(

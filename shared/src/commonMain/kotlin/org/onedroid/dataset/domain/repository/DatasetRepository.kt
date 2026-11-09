@@ -38,12 +38,16 @@ interface DatasetRepository {
     /** Deletes the class and all its images. */
     suspend fun deleteClass(datasetId: String, classId: Int): EmptyResult<DataError.Local>
 
-    /** Adds [sources] to the class; images that can't be decoded are skipped, not failed. */
+    /**
+     * Adds [sources] to the class; images that can't be read or decoded are skipped, not failed.
+     * [onSaved] is called with the index in [sources] of each image as it is saved.
+     */
     suspend fun addImages(
         datasetId: String,
         classId: Int,
         sources: List<ImageSource>,
         onProgress: ProgressListener = { _, _ -> },
+        onSaved: (index: Int) -> Unit = {},
     ): Result<ImportResult, DataError.Local>
 
     /** Adds each group's images to the class with that name, creating classes that don't exist yet. */
@@ -65,15 +69,21 @@ interface DatasetRepository {
 
     /**
      * Writes the dataset as a zip: one folder named after the dataset holding `metadata.json` and a folder
-     * of images per non-empty class.
+     * of images per non-empty class. [unknownImages] go in an `unknown` folder beside it, where training tools
+     * pointed at the dataset folder won't take them for a class.
      */
-    suspend fun exportDataset(datasetId: String, onProgress: ProgressListener = { _, _ -> }): Result<ExportedFile, DataError>
+    suspend fun exportDataset(
+        datasetId: String,
+        unknownImages: List<ImageSource> = emptyList(),
+        onProgress: ProgressListener = { _, _ -> },
+    ): Result<ExportedFile, DataError>
 
     /**
-     * Lists the images in a zip without decoding them, so the caller can decide how its folders become
-     * classes. Fails if it isn't a readable zip or holds no images.
+     * Lists the images in the zip at [path] without decoding them, so the caller can decide how its folders
+     * become classes. Images are read from the file as they are used, so it must stay until the import ends.
+     * Fails if it isn't a readable zip or holds no images.
      */
-    suspend fun readArchive(archive: ByteArray): Result<ArchiveContents, DataError.Archive>
+    suspend fun readArchive(path: String): Result<ArchiveContents, DataError.Archive>
 
     /**
      * Creates a dataset named [name] (or a default name) holding [groups], one class per entry, and returns

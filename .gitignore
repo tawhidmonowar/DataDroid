@@ -36,3 +36,9 @@ google-services.json
 
 # Downloaded native dependencies (see shared/build.gradle.kts)
 third_party/
+
+# Xcode per-user state
+xcuserdata/
+
+# Release signing (see androidApp/build.gradle.kts)
+keystore.properties
