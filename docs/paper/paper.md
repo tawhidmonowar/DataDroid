@@ -96,7 +96,8 @@ to transfer better [Kornblith et al., 2019], and recent mobile-oriented encoders
 This paper improves the matcher on top of a fixed backbone. It does not change the backbone.
 
 **Near-duplicates in evaluation.** Near-duplicate images that straddle a train/test split inflate measured
-accuracy. Our evaluation excludes the held-out image's whole burst group when refitting, for the same reason.
+accuracy. For example, the CIFAR test sets contain near-duplicates of training images, and removing them lowers
+measured accuracy [Barz and Denzler, 2020]. Our evaluation excludes the held-out image's whole burst group when refitting, for the same reason.
 
 # 3 System overview
 
@@ -120,7 +121,8 @@ and mapped to RGB values in [0, 1]. A MobileNetV3-Small image embedder (MediaPip
 threads. The model is loaded once and shared by all open datasets.
 
 **Embedding cache.** Each stored image's embedding is appended to a per-dataset binary file, so each stored image
-is embedded only once for the cache. A newly captured frame is also embedded once beforehand, to choose its class. The matcher is refitted from cached embeddings whenever the dataset changes, for example after an image
+is embedded only once. A newly captured frame is embedded to choose its class, and when the frame is saved that
+embedding is reused for the cache rather than computed again. The matcher is refitted from cached embeddings whenever the dataset changes, for example after an image
 is added, moved or deleted, or a class is created. Refits are conflated, so only the latest dataset state is fitted.
 Refitting happens off the UI thread.
 
@@ -358,8 +360,8 @@ design predicts:
 
 - In small classes (S1), centring helps most (Table 4).
 - With bursts (S4, S5), group weighting helps most (Table 4).
-- On flowers, the neighbour term adds about 1.5 points even at 60 photos per class (Table 4), consistent with
-  classes that have several distinct looks.
+- On flowers, the neighbour term adds 2.7 points even at 60 photos per class (0.840 to 0.867 with centring and
+  grouping; Section 6.4), consistent with classes that have several distinct looks.
 
 On Imagewoof without bursts and with 20 or more photos per class, the two matchers are statistically
 indistinguishable. A likely explanation is that each breed forms a compact, single cluster in this feature space,
@@ -436,7 +438,8 @@ The ablation leads to four observations:
   Imagewoof S1: 0.732 to 0.748). It is neutral to slightly harmful with larger classes and harmful in burst
   scenarios *without* grouping, where burst-heavy classes bias the mean. With grouping, centring is roughly neutral
   on average and helps the hybrid score.
-- **The neighbour term** helps flowers (+1.5 points over the centroid on average) and is neutral on Imagewoof.
+- **The neighbour term** helps flowers (+2.0 points over the centroid on average with centring and grouping, 0.768
+  to 0.788; +1.5 without either) and is neutral on Imagewoof.
   Using neighbours *alone* is best on flowers but worst on Imagewoof (0.807). The blend is the most robust choice
   across both datasets.
 - On Imagewoof, the simplest improvement, centroid plus grouping (0.821), matches the full method (0.821). A
@@ -567,6 +570,8 @@ and takes full responsibility for the content.
 
 # References
 
+- Barz, B. and Denzler, J. (2020). Do we train on test data? Purging CIFAR of near-duplicates. *Journal of
+  Imaging*, 6(6):41.
 - Bendale, A. and Boult, T. E. (2016). Towards open set deep networks. In *CVPR*.
 - Cover, T. and Hart, P. (1967). Nearest neighbor pattern classification. *IEEE Transactions on Information Theory*,
   13(1):21–27.
