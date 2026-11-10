@@ -1,5 +1,5 @@
 ---
-title: "DataDroid: An Image Dataset Builder for Mobile Devices Using Frozen-Backbone Embeddings to Auto-Label Images"
+title: "DataDroid: An Image Dataset Builder App for Mobile Devices Using Frozen-Backbone Embeddings to Auto-Label Images"
 author:
   - name: Tawhid Monowar
     affiliation: "[Affiliation]"
@@ -96,7 +96,8 @@ to transfer better [Kornblith et al., 2019], and recent mobile-oriented encoders
 This paper improves the matcher on top of a fixed backbone. It does not change the backbone.
 
 **Near-duplicates in evaluation.** Near-duplicate images that straddle a train/test split inflate measured
-accuracy. Our evaluation excludes the held-out image's whole burst group when refitting, for the same reason.
+accuracy. For example, the CIFAR test sets contain near-duplicates of training images, and removing them lowers
+measured accuracy [Barz and Denzler, 2020]. Our evaluation excludes the held-out image's whole burst group when refitting, for the same reason.
 
 # 3 System overview
 
@@ -105,7 +106,7 @@ the UI, storage, preprocessing, embedding cache and matcher, is shared between A
 image codecs, pickers, share sheet, zip inflation and model runtime are platform-specific. As a result, both platforms label images with
 identical logic. Figure 1 shows the pipeline.
 
-![DataDroid auto-labelling pipeline](paper/figures/fig1_pipeline.png)
+![DataDroid auto-labelling pipeline](figures/fig1_pipeline.png)
 
 **Figure 1.** DataDroid's auto-labelling pipeline. Each captured or imported image is preprocessed and embedded by the
 frozen MobileNetV3-Small backbone, then accepted into its best class or held in the unknown queue. Whenever the
@@ -120,7 +121,8 @@ and mapped to RGB values in [0, 1]. A MobileNetV3-Small image embedder (MediaPip
 threads. The model is loaded once and shared by all open datasets.
 
 **Embedding cache.** Each stored image's embedding is appended to a per-dataset binary file, so each stored image
-is embedded only once for the cache. A newly captured frame is also embedded once beforehand, to choose its class. The matcher is refitted from cached embeddings whenever the dataset changes, for example after an image
+is embedded only once. A newly captured frame is embedded to choose its class, and when the frame is saved that
+embedding is reused for the cache rather than computed again. The matcher is refitted from cached embeddings whenever the dataset changes, for example after an image
 is added, moved or deleted, or a class is created. Refits are conflated, so only the latest dataset state is fitted.
 Refitting happens off the UI thread.
 
@@ -153,7 +155,7 @@ The baseline has three weaknesses in this setting:
 - In-sample radii are biased low, and bursts shrink them further, so the margin needed to accept ordinary images
   ends up large enough that unseen classes are rarely rejected (Section 6.3).
 
-![Schematic of burst pull and two-look classes](paper/figures/fig2_schematic.png)
+![Schematic of burst pull and two-look classes](figures/fig2_schematic.png)
 
 **Figure 2.** The two problems the matcher addresses, on synthetic two-dimensional points (real embeddings have 1,024
 dimensions and are compared by cosine similarity). (a) A burst of near-identical frames pulls an unweighted class
@@ -251,7 +253,7 @@ transposition, centre square crop, bilinear resize to 224x224, and scaling to [0
 **Simulated bursts.** For the first 20 sampled photos of each class, we add four *neighbouring frames*. Each is a
 square crop of 88% to 98% of the short side, offset by up to ±4% of the side, with brightness scaled by 0.9 to 1.1.
 This gives five frames per burst, matching about one second of DataDroid's hold-to-record capture. The result is
-1,000 embeddings for flowers and 2,000 for Imagewoof. The embedding script (`scripts/embed_dataset.py`) is released.
+1,000 embeddings for flowers and 2,000 for Imagewoof. The embedding script (`docs/scripts/embed_dataset.py`) is released.
 
 ## 5.2 Scenarios
 
@@ -327,7 +329,7 @@ $\tau = 0.85$ for simulated bursts.
 but the evaluation treats them as separate photos, so they can fall on both sides of a leave-one-out split. Both
 matchers are evaluated on the same splits, so neither is favoured by design.
 
-![Similarity of burst frames versus distinct photos](paper/figures/fig3_similarity.png)
+![Similarity of burst frames versus distinct photos](figures/fig3_similarity.png)
 
 **Figure 3.** Cosine similarity between each simulated burst frame and its own source photo (green), and between each
 photo and the most similar other photo in the same dataset (grey). The grouping threshold τ = 0.85 separates the
@@ -358,14 +360,14 @@ design predicts:
 
 - In small classes (S1), centring helps most (Table 4).
 - With bursts (S4, S5), group weighting helps most (Table 4).
-- On flowers, the neighbour term adds about 1.5 points even at 60 photos per class (Table 4), consistent with
-  classes that have several distinct looks.
+- On flowers, the neighbour term adds 2.7 points even at 60 photos per class (0.840 to 0.867 with centring and
+  grouping; Section 6.4), consistent with classes that have several distinct looks.
 
 On Imagewoof without bursts and with 20 or more photos per class, the two matchers are statistically
 indistinguishable. A likely explanation is that each breed forms a compact, single cluster in this feature space,
 which suits a plain class mean. We did not measure this directly.
 
-![Paired accuracy differences with confidence intervals](paper/figures/fig4_closed_set.png)
+![Paired accuracy differences with confidence intervals](figures/fig4_closed_set.png)
 
 **Figure 4.** Paired change in leave-one-group-out accuracy (new matcher minus baseline) with 95% confidence intervals
 over 10 draws per scenario. Filled markers: the interval excludes zero.
@@ -383,7 +385,7 @@ per draw).
 | 75 | 0.805 / 0.145 | 0.783 / 0.461 | 0.822 / 0.183 | 0.749 / 0.567 |
 | 100 | 0.621 / 0.639 | 0.635 / 0.797 | 0.610 / 0.824 | 0.603 / 0.832 |
 
-![Open-set operating curves](paper/figures/fig5_open_set.png)
+![Open-set operating curves](figures/fig5_open_set.png)
 
 **Figure 5.** Open-set operating curves as strictness rises from 0 (left end) to 100 (right end): share of unknown-class
 images rejected against share of known images kept in their correct class. Larger markers show the default
@@ -436,14 +438,15 @@ The ablation leads to four observations:
   Imagewoof S1: 0.732 to 0.748). It is neutral to slightly harmful with larger classes and harmful in burst
   scenarios *without* grouping, where burst-heavy classes bias the mean. With grouping, centring is roughly neutral
   on average and helps the hybrid score.
-- **The neighbour term** helps flowers (+1.5 points over the centroid on average) and is neutral on Imagewoof.
+- **The neighbour term** helps flowers (+2.0 points over the centroid on average with centring and grouping, 0.768
+  to 0.788; +1.5 without either) and is neutral on Imagewoof.
   Using neighbours *alone* is best on flowers but worst on Imagewoof (0.807). The blend is the most robust choice
   across both datasets.
 - On Imagewoof, the simplest improvement, centroid plus grouping (0.821), matches the full method (0.821). A
   deployment that cannot afford neighbour search could take most of the burst benefit without it, though
   grouping remains the main refit cost.
 
-![Ablation of matcher components](paper/figures/fig6_ablation.png)
+![Ablation of matcher components](figures/fig6_ablation.png)
 
 **Figure 6.** Ablation: closed-set accuracy averaged over S1 to S5 for each matcher variant (NumPy re-implementation).
 Orange marks the baseline scoring, also drawn as a reference line; blue marks the deployed matcher.
@@ -473,7 +476,7 @@ quickly new images influence labelling but does not block the interface. Per-que
 budget of five frames per second at these sizes on the laptop. We did not measure on-device timings for this
 paper.
 
-![Refit and match time against dataset size](paper/figures/fig7_cost.png)
+![Refit and match time against dataset size](figures/fig7_cost.png)
 
 **Figure 7.** Cost as the dataset grows (JVM on an Apple M3 Pro; random per-class subsets of a 5,800-image Imagewoof pool).
 (a) Refit time on a log scale, median of 9 refits. (b) Time to match one image.
@@ -535,28 +538,28 @@ All code, including the evaluation harness, is open source.
 
 DataDroid, including the matcher (`ClassMatcher.kt`), the evaluator (`LeaveOneOut.kt`), the baseline fixture
 (`LegacyClassMatcher.kt`), the benchmark (`MatcherBenchmark.kt`) and the embedding script
-(`scripts/embed_dataset.py`), is available at <https://github.com/tawhidmonowar/DataDroid> under the Apache 2.0
+(`docs/scripts/embed_dataset.py`), is available at <https://github.com/tawhidmonowar/DataDroid> under the Apache 2.0
 licence. To reproduce Tables 2, 3 and 5 (run from the repository root; Gradle runs the test from the `shared`
 folder, so the embedding paths must be absolute):
 
 ```bash
-python scripts/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <flower_photos dir> flowers.bin 120 20
-python scripts/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <imagewoof2-160/train dir> woof.bin 120 20
+python docs/scripts/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <flower_photos dir> flowers.bin 120 20
+python docs/scripts/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <imagewoof2-160/train dir> woof.bin 120 20
 DATADROID_EMBEDDINGS=$PWD/flowers.bin,$PWD/woof.bin ./gradlew :shared:testAndroidHostTest --tests '*MatcherBenchmark.compareMatchers' --rerun -i
 ```
 
 For Figure 7, embed a larger pool and run the cost test:
 
 ```bash
-python scripts/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <imagewoof2-160/train dir> woof_large.bin 500 20
+python docs/scripts/embed_dataset.py shared/src/commonMain/composeResources/files/mobilenet_v3_small.tflite <imagewoof2-160/train dir> woof_large.bin 500 20
 DATADROID_EMBEDDINGS=$PWD/woof_large.bin ./gradlew :shared:testAndroidHostTest --tests '*MatcherBenchmark.measureCost' --rerun -i
 ```
 
-The results behind every figure are in `paper/data` as CSV files, and `scripts/paper_figures.py` redraws all figures
+The results behind every figure are in `docs/paper/data` as CSV files, and `docs/scripts/paper_figures.py` redraws all figures
 from them (it needs matplotlib and numpy):
 
 ```bash
-python scripts/paper_figures.py
+python docs/scripts/paper_figures.py
 ```
 
 # Acknowledgements
@@ -567,6 +570,8 @@ and takes full responsibility for the content.
 
 # References
 
+- Barz, B. and Denzler, J. (2020). Do we train on test data? Purging CIFAR of near-duplicates. *Journal of
+  Imaging*, 6(6):41.
 - Bendale, A. and Boult, T. E. (2016). Towards open set deep networks. In *CVPR*.
 - Cover, T. and Hart, P. (1967). Nearest neighbor pattern classification. *IEEE Transactions on Information Theory*,
   13(1):21–27.

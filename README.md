@@ -1,19 +1,21 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/DataDroid%20Dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/DataDroid%20Light.png">
-    <img alt="DataDroid: build image datasets on your phone, with AI on-device" src="assets/DataDroid%20Light.png" width="640">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/DataDroid%20Dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/DataDroid%20Light.png">
+    <img alt="DataDroid: build image datasets on your phone, with AI on-device" src="docs/assets/DataDroid%20Light.png" width="640">
   </picture>
 </p>
+
+<div align="center">
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.20-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Compose Multiplatform](https://img.shields.io/badge/Compose_Multiplatform-1.12.1-4285F4?logo=jetpackcompose&logoColor=white)](https://www.jetbrains.com/compose-multiplatform/)
 [![Platforms](https://img.shields.io/badge/platforms-Android_%7C_iOS-34A853)](#requirements)
 [![Android](https://img.shields.io/badge/Android-7.0%2B-3DDC84?logo=android&logoColor=white)](#run-on-android)
 [![iOS](https://img.shields.io/badge/iOS-18.2%2B-000000?logo=apple&logoColor=white)](#run-on-ios)
-[![On-device AI](https://img.shields.io/badge/AI-on--device_MobileNetV3-FF6F00?logo=tensorflow&logoColor=white)](#features)
-[![License](https://img.shields.io/badge/license-Apache_2.0-blue)](LICENSE)
-[![Website](https://img.shields.io/badge/website-DataDroid-1967D2)](https://tawhidmonowar.github.io/DataDroid/)
+[![On-device AI](https://img.shields.io/badge/AI-on--device-FF6F00?logo=tensorflow&logoColor=white)](#features)
+
+</div>
 
 DataDroid is a cross-platform, on-device image dataset studio built with Kotlin Multiplatform and Compose
 Multiplatform. Create image classification datasets on Android and iOS, capture or import images per class,
@@ -43,12 +45,13 @@ Everything runs on the device, including the auto-sort model, so no image ever l
   square, what the viewfinder shows). Photos from the library go the same way. Images can also be added
   from a folder per class, or imported as a folder or zip of class folders (merged by class name).
   Originals are kept unchanged; files that aren't decodable images are skipped.
-- **Auto-sort**: capture without choosing a class. An on-device MobileNetV3-Small model embeds each image and
+- **Auto-sort**: capture without choosing a class. An on-device model (MobileNetV3-Small by default, or
+  MobileNetV3-Large or DINOv2 ViT-S/14, chosen in Settings) embeds each image and
   saves it to the class whose images it's most like, with a live label over the viewfinder. Images unlike
   every class wait under **Unknown** (kept on disk, so closing the camera or the app loses none), where they
   can start a new class, join an existing one, or be discarded. "Unknown detection" sets how alike an image
-  must be to a class (0 turns it off). Embeddings are cached per dataset in `embeddings.bin`, so each image is
-  only analysed once.
+  must be to a class (0 turns it off). Embeddings are cached per dataset and model (`embeddings.bin` for Small),
+  so each image is only analysed once per model.
 - **Review**: per class, a progress bar towards 20 images and the newest thumbnails; a gallery with
   multi-select to move or delete; and a full-screen viewer to swipe through images, zoom, move or delete.
   Deletes can be undone for a few seconds.
@@ -198,7 +201,9 @@ The shared tests in `shared/src/commonTest` run on both platforms:
 
 DataDroid is licensed under the [Apache License 2.0](LICENSE).
 
-It bundles the MobileNetV3-Small image embedder from
+It bundles a DINOv2 ViT-S/14 image encoder converted from [Meta's DINOv2](https://github.com/facebookresearch/dinov2)
+(Apache 2.0; conversion script in `docs/scripts/export_dinov2.py`), and the MobileNetV3-Small and MobileNetV3-Large
+image embedders from
 [Google MediaPipe](https://ai.google.dev/edge/mediapipe/solutions/vision/image_embedder) (Apache 2.0),
 uses LiteRT on Android and the TensorFlow Lite C runtime on iOS (Apache 2.0), and includes Material Design
 icon paths (Apache 2.0). See [NOTICE](NOTICE) for details and sources.
@@ -208,4 +213,5 @@ icon paths (Apache 2.0). See [NOTICE](NOTICE) for details and sources.
 **Tawhid Monowar** - *Computer Science & Engineering Student* <br>
 [LinkedIn](https://www.linkedin.com/in/tawhidmonowar) | [Portfolio](https://tawhidmonowar.github.io)  | [Email](mailto:tawhidmonowar@duck.com)
 
-The contest essay is in [ESSAY.md](docs/ESSAY.md).
+The contest essay is in [ESSAY.md](docs/ESSAY.md), and the paper on the auto-sort matcher is in
+[docs/paper/paper.md](docs/paper/paper.md).
