@@ -3,7 +3,10 @@ package org.onedroid.dataset.data
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.onedroid.dataset.domain.DataError
 import org.onedroid.dataset.domain.Result
@@ -14,7 +17,8 @@ import org.onedroid.dataset.domain.usecase.ClassMatcher
 import org.onedroid.dataset.core.platform.image.RgbImage
 import org.onedroid.dataset.core.platform.ml.Backbone
 import org.onedroid.dataset.core.platform.ml.BackboneLoader
-import org.onedroid.dataset.core.platform.ml.MobileNetV3Small
+import org.onedroid.dataset.core.platform.ml.spec
+import org.onedroid.dataset.domain.model.EmbeddingModel
 import org.onedroid.dataset.core.platform.ml.SharedBackbone
 import org.onedroid.dataset.testutil.FakeImageProcessor
 import org.onedroid.dataset.testutil.fakeJpeg
@@ -43,11 +47,11 @@ class EmbeddingImageSorterTest {
         RgbImage(size, size, IntArray(size * size) { color })
     }
 
-    /** Embeds an image as its mean color, padded to the real embedding size. */
-    private val backbone = object : Backbone {
+    /** Embeds an image as its mean color, padded to [model]'s embedding size. */
+    private fun backbone(model: EmbeddingModel) = object : Backbone {
         override fun embed(input: FloatArray): FloatArray {
             embedCalls++
-            val out = FloatArray(MobileNetV3Small.EMBEDDING_SIZE)
+            val out = FloatArray(model.spec.embeddingSize)
             for (i in input.indices) out[i % 3] += input[i]
             return out
         }
@@ -55,10 +59,21 @@ class EmbeddingImageSorterTest {
         override fun close() = Unit
     }
 
-    private fun sorter(loader: BackboneLoader? = BackboneLoader { backbone }) = EmbeddingImageSorter(
+    /** Loads the fake backbone for the model named by the "model file". */
+    private val fakeLoader = BackboneLoader { bytes -> backbone(EmbeddingModel.valueOf(bytes.decodeToString())) }
+
+    private fun sorter(
+        loader: BackboneLoader? = fakeLoader,
+        model: Flow<EmbeddingModel> = flowOf(EmbeddingModel.DEFAULT),
+    ) = EmbeddingImageSorter(
         paths = paths,
         repository = repository,
-        backbone = SharedBackbone(loader, CoroutineScope(SupervisorJob() + Dispatchers.Default), readModel = { ByteArray(0) }),
+        backbone = SharedBackbone(
+            loader,
+            CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            model = model,
+            readModel = { it.name.encodeToByteArray() },
+        ),
         imageProcessor = FakeImageProcessor(),
         decode = decode,
     )
@@ -149,6 +164,29 @@ class EmbeddingImageSorterTest {
         val sorter = sorter()
         assertTrue(!sorter.matcherFor(dataset(id)).value().isEmpty)
         assertNull(sorter.embed(fakeJpeg("purple")).value())
+    }
+
+    @Test
+    fun eachModelKeepsItsOwnEmbeddings() = runTest {
+        val (id, red, _) = redAndBlue()
+        val model = MutableStateFlow(EmbeddingModel.MOBILENET_V3_SMALL)
+        val sorter = sorter(model = model)
+        assertEquals(1024, sorter.matcherFor(dataset(id)).value().dimensions)
+        assertEquals(6, embedCalls)
+
+        // Switching analyses every image again with the new model, and sorts with it.
+        model.value = EmbeddingModel.MOBILENET_V3_LARGE
+        val large = sorter.matcherFor(dataset(id)).value()
+        assertEquals(1280, large.dimensions)
+        assertEquals(12, embedCalls)
+        val frame = sorter.embed(fakeJpeg("red-new")).value()!!
+        assertEquals(1280, frame.size)
+        assertEquals(red, large.match(frame, ClassMatcher.DEFAULT_STRICTNESS).classId)
+
+        // Switching back reads the first model's cache rather than embedding again.
+        model.value = EmbeddingModel.MOBILENET_V3_SMALL
+        assertEquals(1024, sorter.matcherFor(dataset(id)).value().dimensions)
+        assertEquals(13, embedCalls)
     }
 
     @Test

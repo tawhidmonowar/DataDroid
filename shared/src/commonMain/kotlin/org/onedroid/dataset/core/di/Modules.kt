@@ -57,7 +57,13 @@ val dataModule = module {
     // For work that must finish after the screen that started it has gone.
     single { ApplicationScope() }
     // Loaded on first use and kept for the app's lifetime; shared by every dataset.
-    single { SharedBackbone(loader = getOrNull(), scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)) }
+    single {
+        SharedBackbone(
+            loader = getOrNull(),
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            model = get<SettingsRepository>().observeEmbeddingModel(),
+        )
+    }
     single<ImageSorter> { EmbeddingImageSorter(paths = get(), repository = get(), backbone = get(), imageProcessor = get()) }
 }
 

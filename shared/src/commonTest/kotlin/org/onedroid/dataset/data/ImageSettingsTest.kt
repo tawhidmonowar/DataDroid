@@ -13,6 +13,7 @@ import org.onedroid.dataset.data.settings.FileSettingsRepository
 import org.onedroid.dataset.data.storage.FileDatasetRepository
 import org.onedroid.dataset.data.storage.StoragePaths
 import org.onedroid.dataset.domain.model.Dataset
+import org.onedroid.dataset.domain.model.EmbeddingModel
 import org.onedroid.dataset.domain.model.ImageSettings
 import org.onedroid.dataset.domain.model.ImportResult
 import org.onedroid.dataset.domain.model.OutputFormat
@@ -56,6 +57,31 @@ class ImageSettingsTest {
         settings.saveImageSettings(square).value()
 
         assertEquals(square, FileSettingsRepository(paths.settingsFile).observeImageSettings().first())
+    }
+
+    @Test
+    fun embeddingModelIsSavedAlongsideImageSettings() = runTest {
+        val settings = FileSettingsRepository(paths.settingsFile)
+        assertEquals(EmbeddingModel.DEFAULT, settings.observeEmbeddingModel().first())
+        settings.saveImageSettings(square).value()
+        settings.saveEmbeddingModel(EmbeddingModel.MOBILENET_V3_LARGE).value()
+
+        val reloaded = FileSettingsRepository(paths.settingsFile)
+        assertEquals(EmbeddingModel.MOBILENET_V3_LARGE, reloaded.observeEmbeddingModel().first())
+        assertEquals(square, reloaded.observeImageSettings().first())
+    }
+
+    @Test
+    fun unknownEmbeddingModelFallsBackToTheDefaultAndKeepsImageSettings() = runTest {
+        FileSettingsRepository(paths.settingsFile).saveImageSettings(square).value()
+        val text = read(paths.settingsFile).decodeToString()
+        assertTrue("MOBILENET_V3_SMALL" in text)
+        // As written by a newer version with a model this one doesn't have.
+        write(paths.settingsFile, text.replace("MOBILENET_V3_SMALL", "SOME_FUTURE_MODEL").encodeToByteArray())
+
+        val reloaded = FileSettingsRepository(paths.settingsFile)
+        assertEquals(EmbeddingModel.DEFAULT, reloaded.observeEmbeddingModel().first())
+        assertEquals(square, reloaded.observeImageSettings().first())
     }
 
     @Test

@@ -34,6 +34,8 @@ class ClassMatcher private constructor(
     private val classes: List<ClassModel>,
     /** Per-class radius in score distance, before any margin. */
     private val radii: FloatArray,
+    /** Length of the embeddings fitted, or 0 when [isEmpty]; [match] needs embeddings of this length. */
+    val dimensions: Int,
 ) {
     /** True when no class has images, so every image is unknown. */
     val isEmpty: Boolean get() = classIds.isEmpty()
@@ -150,7 +152,7 @@ class ClassMatcher private constructor(
             val measured = models.map { it.measureRadius() }
             val typical = measured.filterNotNull().sorted().let { if (it.isEmpty()) FALLBACK_RADIUS else it[it.size / 2] }
             val radii = FloatArray(ids.size) { (measured[it] ?: typical).coerceAtLeast(MIN_RADIUS) }
-            return ClassMatcher(ids, mean, models, radii)
+            return ClassMatcher(ids, mean, models, radii, dimensions = classes.firstOrNull()?.units?.firstOrNull()?.size ?: 0)
         }
     }
 }

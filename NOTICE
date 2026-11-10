@@ -16,6 +16,26 @@ MobileNetV3-Small image embedder
   License: Apache License 2.0 (stated in the model's embedded metadata)
   Redistributed unmodified.
 
+MobileNetV3-Large image embedder
+  File:    shared/src/commonMain/composeResources/files/mobilenet_v3_large.tflite
+  Source:  Google MediaPipe Image Embedder
+           https://ai.google.dev/edge/mediapipe/solutions/vision/image_embedder
+           https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_large/float32/latest/mobilenet_v3_large.tflite
+  SHA-256: 11af3c560dfeed7737cb4c03c23bf52a8403020784192d4dea0b74862a12828d
+  License: Apache License 2.0 (stated in the model's embedded metadata)
+  Redistributed unmodified.
+
+DINOv2 ViT-S/14 image encoder
+  File:    shared/src/commonMain/composeResources/files/dinov2_small.tflite
+  Source:  Meta AI, "DINOv2: Learning Robust Visual Features without Supervision"
+           https://github.com/facebookresearch/dinov2
+           Weights: https://huggingface.co/facebook/dinov2-small
+           (revision ed25f3a31f01632728cabb09d1542f84ab7b0056)
+  SHA-256: 3ac7141c4ded469e74e6e69f15a232074351895817d3993c798e275221e1fb7e
+  License: Apache License 2.0
+  Modified: converted to LiteRT with int8 weights, with input normalisation and position embeddings
+  for 224 px built in, by docs/scripts/export_dinov2.py.
+
 TensorFlow Lite C runtime 2.17.0 (iOS)
   Source:  https://www.tensorflow.org/lite (Google)
   License: Apache License 2.0

@@ -45,12 +45,13 @@ Everything runs on the device, including the auto-sort model, so no image ever l
   square, what the viewfinder shows). Photos from the library go the same way. Images can also be added
   from a folder per class, or imported as a folder or zip of class folders (merged by class name).
   Originals are kept unchanged; files that aren't decodable images are skipped.
-- **Auto-sort**: capture without choosing a class. An on-device MobileNetV3-Small model embeds each image and
+- **Auto-sort**: capture without choosing a class. An on-device model (MobileNetV3-Small by default, or
+  MobileNetV3-Large or DINOv2 ViT-S/14, chosen in Settings) embeds each image and
   saves it to the class whose images it's most like, with a live label over the viewfinder. Images unlike
   every class wait under **Unknown** (kept on disk, so closing the camera or the app loses none), where they
   can start a new class, join an existing one, or be discarded. "Unknown detection" sets how alike an image
-  must be to a class (0 turns it off). Embeddings are cached per dataset in `embeddings.bin`, so each image is
-  only analysed once.
+  must be to a class (0 turns it off). Embeddings are cached per dataset and model (`embeddings.bin` for Small),
+  so each image is only analysed once per model.
 - **Review**: per class, a progress bar towards 20 images and the newest thumbnails; a gallery with
   multi-select to move or delete; and a full-screen viewer to swipe through images, zoom, move or delete.
   Deletes can be undone for a few seconds.
@@ -200,7 +201,9 @@ The shared tests in `shared/src/commonTest` run on both platforms:
 
 DataDroid is licensed under the [Apache License 2.0](LICENSE).
 
-It bundles the MobileNetV3-Small image embedder from
+It bundles a DINOv2 ViT-S/14 image encoder converted from [Meta's DINOv2](https://github.com/facebookresearch/dinov2)
+(Apache 2.0; conversion script in `docs/scripts/export_dinov2.py`), and the MobileNetV3-Small and MobileNetV3-Large
+image embedders from
 [Google MediaPipe](https://ai.google.dev/edge/mediapipe/solutions/vision/image_embedder) (Apache 2.0),
 uses LiteRT on Android and the TensorFlow Lite C runtime on iOS (Apache 2.0), and includes Material Design
 icon paths (Apache 2.0). See [NOTICE](NOTICE) for details and sources.

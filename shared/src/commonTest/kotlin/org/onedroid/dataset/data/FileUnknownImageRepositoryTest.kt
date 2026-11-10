@@ -1,6 +1,7 @@
 package org.onedroid.dataset.data
 
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
@@ -10,6 +11,7 @@ import org.onedroid.dataset.data.storage.FileUnknownImageRepository
 import org.onedroid.dataset.domain.DataError
 import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.domain.model.Dataset
+import org.onedroid.dataset.domain.model.EmbeddingModel
 import org.onedroid.dataset.domain.repository.ImageSorter
 import org.onedroid.dataset.domain.repository.ProgressListener
 import org.onedroid.dataset.domain.usecase.ClassNaming
@@ -123,6 +125,7 @@ class FileUnknownImageRepositoryTest {
 
     /** Only previews images, which is all keeping unknowns needs. */
     private object PreviewingSorter : ImageSorter {
+        override val model = flowOf(EmbeddingModel.DEFAULT)
         override suspend fun matcherFor(dataset: Dataset, onProgress: ProgressListener) = error("Not used")
         override suspend fun embed(image: ByteArray, saving: Boolean) = error("Not used")
         override suspend fun preview(image: ByteArray): ByteArray = "preview".encodeToByteArray()
