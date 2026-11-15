@@ -4,7 +4,6 @@ import org.onedroid.dataset.domain.usecase.ClassMatch
 import org.onedroid.dataset.domain.usecase.ClassMatcher
 import org.onedroid.dataset.domain.usecase.LabeledEmbedding
 import org.onedroid.dataset.domain.usecase.LeaveOneOut
-import org.onedroid.dataset.testutil.LegacyClassMatcher
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -12,7 +11,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 
 /**
- * Compares [ClassMatcher] with [LegacyClassMatcher] on real embeddings. Skipped unless
+ * Compares [ClassMatcher] without (before) and with (after) its trained [org.onedroid.dataset.domain.usecase.ClassifierHead] on real embeddings. Skipped unless
  * DATADROID_EMBEDDINGS names one or more embedding files (comma-separated), as written by
  * docs/scripts/embed_dataset.py: little-endian int magic "DDEV", int dimensions, then per image int class, int source image,
  * int frame (0 for the photo itself, 1.. for simulated burst frames), and the embedding.
@@ -31,7 +30,7 @@ class MatcherBenchmark {
     )
 
     private val matchers: List<Pair<String, (Map<Int, List<FloatArray>>) -> (FloatArray, Int) -> ClassMatch>> = listOf(
-        "before" to { byClass -> LegacyClassMatcher.fit(byClass)::match },
+        "before" to { byClass -> ClassMatcher.fit(byClass, trainHead = false)::match },
         "after" to { byClass -> ClassMatcher.fit(byClass)::match },
     )
 

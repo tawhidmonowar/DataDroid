@@ -26,6 +26,11 @@ data class ClassMatch(val classId: Int?, val closestClassId: Int?, val similarit
  * Each class also gets a radius: the distance within which [COVERAGE] of its own images lie when each is
  * scored against the rest of the class. An image goes to the best-scoring class, unless it lies outside that
  * class's radius (scaled by a margin set by strictness), when it's unknown.
+ *
+ * Once every class has at least [MIN_HEAD_EXAMPLES] distinct images (and there are two classes or more), a
+ * [ClassifierHead] is trained on the embeddings too, and it picks the class instead: transfer learning, with the
+ * backbone frozen and one linear layer learnt on the device. The radius still decides whether the image belongs
+ * to the class the head picked, as a softmax always picks some class and can't say "none of these".
  */
 class ClassMatcher private constructor(
     private val classIds: List<Int>,
@@ -34,11 +39,16 @@ class ClassMatcher private constructor(
     private val classes: List<ClassModel>,
     /** Per-class radius in score distance, before any margin. */
     private val radii: FloatArray,
+    /** Picks the class when trained, or null while some class has too few images (or there's only one class). */
+    private val head: ClassifierHead?,
     /** Length of the embeddings fitted, or 0 when [isEmpty]; [match] needs embeddings of this length. */
     val dimensions: Int,
 ) {
     /** True when no class has images, so every image is unknown. */
     val isEmpty: Boolean get() = classIds.isEmpty()
+
+    /** True when a trained [ClassifierHead] picks the class, false when the nearest class by score does. */
+    val usesTrainedHead: Boolean get() = head != null
 
     /**
      * The class [embedding] belongs to. [strictness] runs from 0 (never unknown: always the nearest class)
@@ -49,11 +59,16 @@ class ClassMatcher private constructor(
         val query = centred(embedding.normalized(), mean)
         var best = 0
         var bestScore = -Float.MAX_VALUE
-        for (i in classes.indices) {
-            val score = classes[i].score(query)
-            if (score > bestScore) {
-                best = i
-                bestScore = score
+        if (head != null) {
+            best = head.predict(query)
+            bestScore = classes[best].score(query)
+        } else {
+            for (i in classes.indices) {
+                val score = classes[i].score(query)
+                if (score > bestScore) {
+                    best = i
+                    bestScore = score
+                }
             }
         }
         val distance = 1f - bestScore
@@ -93,11 +108,24 @@ class ClassMatcher private constructor(
         const val NEIGHBOURS = 5
 
         /**
+         * Distinct images (groups of near-duplicates count once) every class needs before a [ClassifierHead] is
+         * trained. With fewer, a trained layer overfits and the nearest class by score sorts as well or better.
+         */
+        const val MIN_HEAD_EXAMPLES = 10
+
+        /**
+         * Most distinct images per class the head trains on, an even spread of them, bounding the cost of a refit
+         * on big classes.
+         */
+        const val MAX_HEAD_EXAMPLES = 48
+
+        /**
          * Builds the matcher from each class's image embeddings, by class id. Classes without images are left
          * out; classes with too few distinct images to measure their spread borrow the typical radius of the
-         * others.
+         * others. [trainHead] false never trains a [ClassifierHead], to compare with it.
          */
-        fun fit(embeddingsByClass: Map<Int, List<FloatArray>>): ClassMatcher = Fitter().fit(embeddingsByClass)
+        fun fit(embeddingsByClass: Map<Int, List<FloatArray>>, trainHead: Boolean = true): ClassMatcher =
+            Fitter(trainHead).fit(embeddingsByClass)
 
         /**
          * Labels each of [units] with its group of near-duplicates: the first earlier image it's at least
@@ -123,9 +151,9 @@ class ClassMatcher private constructor(
      * Grouping near-duplicates compares every image with every group of its class, most of a fit's cost, so each
      * class's groups are kept between fits. A class that only gained images at the end (as the camera adds them)
      * has just those grouped; any other change regroups it. Classes are recognised by the identity of their
-     * embedding arrays, so pass the same arrays each time. Not thread-safe.
+     * embedding arrays, so pass the same arrays each time. [trainHead] as for [ClassMatcher.fit]. Not thread-safe.
      */
-    class Fitter {
+    class Fitter(private val trainHead: Boolean = true) {
         private var grouped = HashMap<Int, GroupedClass>()
 
         fun fit(embeddingsByClass: Map<Int, List<FloatArray>>): ClassMatcher {
@@ -152,7 +180,12 @@ class ClassMatcher private constructor(
             val measured = models.map { it.measureRadius() }
             val typical = measured.filterNotNull().sorted().let { if (it.isEmpty()) FALLBACK_RADIUS else it[it.size / 2] }
             val radii = FloatArray(ids.size) { (measured[it] ?: typical).coerceAtLeast(MIN_RADIUS) }
-            return ClassMatcher(ids, mean, models, radii, dimensions = classes.firstOrNull()?.units?.firstOrNull()?.size ?: 0)
+            val head = if (trainHead && models.size >= 2 && models.all { it.groupCount >= MIN_HEAD_EXAMPLES }) {
+                ClassifierHead.train(models.map { it.examples(MAX_HEAD_EXAMPLES) }, models.map { it.centroid })
+            } else {
+                null
+            }
+            return ClassMatcher(ids, mean, models, radii, head, dimensions = classes.firstOrNull()?.units?.firstOrNull()?.size ?: 0)
         }
     }
 }
@@ -218,9 +251,27 @@ private class ClassModel(
     private val weightedSum = FloatArray(members.first().size).also { sum ->
         for (m in members.indices) for (i in sum.indices) sum[i] += weights[m] * members[m][i]
     }
-    private val centroid = weightedSum.normalized()
+    /** The class's prototype: the weighted mean of its images, as a unit vector. */
+    val centroid = weightedSum.normalized()
+
+    /** How many groups of near-duplicates (distinct images) the class has. */
+    val groupCount = groups.max() + 1
 
     fun score(query: FloatArray): Float = score(query, centroid, excludedGroup = -1)
+
+    /**
+     * Training examples for a [ClassifierHead]: each group of near-duplicates as one unit vector, the mean of
+     * its images, so a burst counts as one image. An even spread of at most [max] groups when there are more.
+     */
+    fun examples(max: Int): List<FloatArray> {
+        val sums = Array(groupCount) { FloatArray(members.first().size) }
+        for (m in members.indices) {
+            val sum = sums[groups[m]]
+            for (i in sum.indices) sum[i] += members[m][i]
+        }
+        val count = min(groupCount, max)
+        return List(count) { p -> sums[(p.toLong() * groupCount / count).toInt()].normalized() }
+    }
 
     /**
      * Centroid similarity blended with the mean similarity of the [ClassMatcher.NEIGHBOURS] nearest images,
@@ -253,7 +304,6 @@ private class ClassModel(
      * of [MAX_PROBES] of them) is scored against the others. Null with fewer than [MIN_GROUPS] groups.
      */
     fun measureRadius(): Float? {
-        val groupCount = groups.max() + 1
         if (groupCount < MIN_GROUPS) return null
         val leaders = IntArray(groupCount).also { leaders -> for (m in members.indices.reversed()) leaders[groups[m]] = m }
         val probes = min(groupCount, MAX_PROBES)
@@ -319,7 +369,7 @@ private class NearestFirst(private val similarities: FloatArray, capacity: Int) 
     }
 }
 
-private fun dot(a: FloatArray, b: FloatArray): Float {
+internal fun dot(a: FloatArray, b: FloatArray): Float {
     var sum = 0f
     for (i in a.indices) sum += a[i] * b[i]
     return sum

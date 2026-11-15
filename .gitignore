@@ -42,3 +42,7 @@ xcuserdata/
 
 # Release signing (see androidApp/build.gradle.kts)
 keystore.properties
+*.aab
+*.txt
+androidApp/release/native-debug-symbols.zip
+androidApp/release/output-metadata.json
