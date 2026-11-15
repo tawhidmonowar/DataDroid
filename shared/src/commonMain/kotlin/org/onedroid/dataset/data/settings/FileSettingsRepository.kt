@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -24,6 +25,7 @@ import org.onedroid.dataset.domain.DataError
 import org.onedroid.dataset.domain.EmptyResult
 import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.data.storage.writeAtomically
+import org.onedroid.dataset.domain.model.EmbeddingModel
 import org.onedroid.dataset.domain.model.ImageSettings
 import org.onedroid.dataset.domain.repository.SettingsRepository
 
@@ -32,6 +34,7 @@ import org.onedroid.dataset.domain.repository.SettingsRepository
 internal data class SettingsRecord(
     val version: Int = 1,
     val imageSettings: ImageSettings = ImageSettings(),
+    val embeddingModel: EmbeddingModel = EmbeddingModel.DEFAULT,
 )
 
 /**
@@ -43,7 +46,8 @@ class FileSettingsRepository(
     private val fileSystem: FileSystem = SystemFileSystem,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : SettingsRepository {
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    // coerceInputValues: a model this version doesn't know (saved by a newer one) reads as the default.
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; coerceInputValues = true }
     private val mutex = Mutex()
 
     /** Null until first loaded from disk. */
@@ -54,9 +58,20 @@ class FileSettingsRepository(
         emitAll(record.filterNotNull().map { it.imageSettings })
     }
 
-    override suspend fun saveImageSettings(settings: ImageSettings): EmptyResult<DataError.Local> = try {
+    override suspend fun saveImageSettings(settings: ImageSettings): EmptyResult<DataError.Local> =
+        save { it.copy(imageSettings = settings.sanitized()) }
+
+    override fun observeEmbeddingModel(): Flow<EmbeddingModel> = flow {
+        locked { }
+        emitAll(record.filterNotNull().map { it.embeddingModel }.distinctUntilChanged())
+    }
+
+    override suspend fun saveEmbeddingModel(model: EmbeddingModel): EmptyResult<DataError.Local> =
+        save { it.copy(embeddingModel = model) }
+
+    private suspend fun save(change: (SettingsRecord) -> SettingsRecord): EmptyResult<DataError.Local> = try {
         locked {
-            val updated = requireNotNull(record.value).copy(imageSettings = settings.sanitized())
+            val updated = change(requireNotNull(record.value))
             fileSystem.writeAtomically(file, json.encodeToString(SettingsRecord.serializer(), updated).encodeToByteArray())
             record.value = updated
         }

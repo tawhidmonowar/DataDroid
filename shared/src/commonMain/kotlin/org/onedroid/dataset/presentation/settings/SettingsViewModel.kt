@@ -35,13 +35,15 @@ class SettingsViewModel(
     init {
         viewModelScope.launch {
             val settings = settingsRepository.observeImageSettings().first()
-            _state.update { it.copy(loading = false, saved = settings, draft = settings) }
+            val model = settingsRepository.observeEmbeddingModel().first()
+            _state.update { it.copy(loading = false, saved = settings, draft = settings, savedModel = model, draftModel = model) }
         }
     }
 
     fun onAction(action: SettingsAction) {
         when (action) {
             is SettingsAction.OnChange -> _state.update { it.copy(draft = action.settings.sanitized()) }
+            is SettingsAction.OnChangeModel -> _state.update { it.copy(draftModel = action.model) }
             SettingsAction.OnSave -> save()
             is SettingsAction.OnApplyToDatasets -> apply(action.ids)
             SettingsAction.OnDismissApply -> _state.update { it.copy(applyChoices = null) }
@@ -53,6 +55,21 @@ class SettingsViewModel(
         if (!current.hasChanges || current.saving) return
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
+            if (current.draftModel != current.savedModel) {
+                when (val result = settingsRepository.saveEmbeddingModel(current.draftModel)) {
+                    is Result.Error -> {
+                        _state.update { it.copy(saving = false) }
+                        showError(result.error)
+                        return@launch
+                    }
+                    is Result.Success -> _state.update { it.copy(savedModel = current.draftModel) }
+                }
+            }
+            if (current.draft == current.saved) {
+                _state.update { it.copy(saving = false) }
+                _events.send(SettingsEvent.ShowMessage(UiText.Resource(Res.string.message_settings_saved)))
+                return@launch
+            }
             when (val result = settingsRepository.saveImageSettings(current.draft)) {
                 is Result.Error -> {
                     _state.update { it.copy(saving = false) }

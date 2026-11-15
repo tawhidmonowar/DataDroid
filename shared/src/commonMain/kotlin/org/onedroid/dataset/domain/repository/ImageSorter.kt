@@ -2,11 +2,19 @@ package org.onedroid.dataset.domain.repository
 
 import org.onedroid.dataset.domain.DataError
 import org.onedroid.dataset.domain.Result
+import kotlinx.coroutines.flow.Flow
 import org.onedroid.dataset.domain.model.Dataset
+import org.onedroid.dataset.domain.model.EmbeddingModel
 import org.onedroid.dataset.domain.usecase.ClassMatcher
 
 /** Recognises which class an image belongs to, from what each class's images look like. */
 interface ImageSorter {
+
+    /**
+     * The model images are compared with. When it changes, matchers from [matcherFor] no longer fit what
+     * [embed] returns and must be fitted again.
+     */
+    val model: Flow<EmbeddingModel>
 
     /**
      * A matcher for [dataset]'s classes as they are now. Images not seen before are embedded first (reported

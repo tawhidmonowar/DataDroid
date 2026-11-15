@@ -10,6 +10,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -24,6 +25,7 @@ import kotlinx.coroutines.selects.select
 import org.onedroid.dataset.domain.DataError
 import org.onedroid.dataset.domain.Result
 import org.onedroid.dataset.domain.model.Dataset
+import org.onedroid.dataset.domain.model.EmbeddingModel
 import org.onedroid.dataset.domain.model.ImageSource
 import org.onedroid.dataset.domain.model.ImportResult
 import org.onedroid.dataset.domain.onFailure
@@ -245,9 +247,18 @@ class CaptureViewModel(
         }
     }
 
-    /** Refits the matcher whenever the dataset changes, so new images and classes count straight away. */
+    /**
+     * Refits the matcher whenever the dataset changes, so new images and classes count straight away, or the
+     * embedding model does. A new model analyses every image again, so auto-sort waits for it as it does at first.
+     */
     private suspend fun followDataset() {
-        dataset.filterNotNull().conflate().collect { current ->
+        var fittedModel: EmbeddingModel? = null
+        combine(dataset.filterNotNull(), sorter.model) { current, model -> current to model }.conflate().collect { (current, model) ->
+            if (fittedModel != null && model != fittedModel) {
+                matcher = null
+                updateAutoSort { it.copy(preparing = true, prepared = 0, toPrepare = 0) }
+            }
+            fittedModel = model
             val first = matcher == null
             sorter.matcherFor(current) { done, total ->
                 if (first) updateAutoSort { it.copy(prepared = done, toPrepare = total) }
@@ -289,7 +300,10 @@ class CaptureViewModel(
                 updateAutoSort { it.copy(unavailable = true) }
                 null
             }
-            is Result.Success -> embedded.data?.let { fitted.match(it, _state.value.strictness) }
+            // A different length means the model changed since the fit; the refit under way replaces it.
+            is Result.Success -> embedded.data
+                ?.takeIf { fitted.isEmpty || it.size == fitted.dimensions }
+                ?.let { fitted.match(it, _state.value.strictness) }
         }
     }
 

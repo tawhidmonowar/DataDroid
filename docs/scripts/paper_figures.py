@@ -1,6 +1,6 @@
-"""Draws the paper's figures from the CSVs in paper/data into paper/figures (PDF and PNG).
+"""Draws the paper's figures from the CSVs in docs/paper/data into docs/paper/figures (PDF and PNG).
 
-Usage: python tools/paper_figures.py [repository root]
+Usage: python docs/scripts/paper_figures.py [repository root]
 Needs matplotlib and numpy.
 """
 import csv
@@ -14,9 +14,9 @@ import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch
 
-ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent
-DATA = ROOT / "paper" / "data"
-OUT = ROOT / "paper" / "figures"
+ROOT = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[2]
+DATA = ROOT / "docs" / "paper" / "data"
+OUT = ROOT / "docs" / "paper" / "figures"
 
 OURS = "#2a78d6"
 BASE = "#eb6834"

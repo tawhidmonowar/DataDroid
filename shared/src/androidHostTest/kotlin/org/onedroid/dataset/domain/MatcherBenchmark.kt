@@ -14,7 +14,7 @@ import kotlin.test.Test
 /**
  * Compares [ClassMatcher] with [LegacyClassMatcher] on real embeddings. Skipped unless
  * DATADROID_EMBEDDINGS names one or more embedding files (comma-separated), as written by
- * tools/embed_dataset.py: little-endian int magic "DDEV", int dimensions, then per image int class, int source image,
+ * docs/scripts/embed_dataset.py: little-endian int magic "DDEV", int dimensions, then per image int class, int source image,
  * int frame (0 for the photo itself, 1.. for simulated burst frames), and the embedding.
  */
 class MatcherBenchmark {

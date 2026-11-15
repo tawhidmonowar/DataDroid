@@ -2,6 +2,8 @@ package org.onedroid.dataset.presentation.settings
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +24,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -37,6 +40,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -49,6 +53,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
+import org.onedroid.dataset.domain.model.EmbeddingModel
 import org.onedroid.dataset.presentation.components.ObserveAsEvents
 import org.onedroid.dataset.presentation.components.AppIcons
 import org.onedroid.dataset.presentation.components.ConfirmDialog
@@ -62,10 +67,19 @@ import org.onedroid.dataset.resources.action_save
 import org.onedroid.dataset.resources.apply_existing_message
 import org.onedroid.dataset.resources.apply_existing_title
 import org.onedroid.dataset.resources.images_count
+import org.onedroid.dataset.resources.model_dinov2_small
+import org.onedroid.dataset.resources.model_dinov2_small_hint
+import org.onedroid.dataset.resources.model_mobilenet_v3_large
+import org.onedroid.dataset.resources.model_mobilenet_v3_large_hint
+import org.onedroid.dataset.resources.model_mobilenet_v3_small
+import org.onedroid.dataset.resources.model_mobilenet_v3_small_hint
 import org.onedroid.dataset.resources.settings_discard_message
 import org.onedroid.dataset.resources.settings_discard_title
 import org.onedroid.dataset.resources.settings_image_body
 import org.onedroid.dataset.resources.settings_image_heading
+import org.onedroid.dataset.resources.settings_model_body
+import org.onedroid.dataset.resources.settings_model_heading
+import org.onedroid.dataset.resources.settings_model_switch_note
 import org.onedroid.dataset.resources.settings_title
 
 @Composable
@@ -144,6 +158,34 @@ fun SettingsScreen(
                             modifier = Modifier.padding(16.dp),
                         )
                     }
+
+                    Text(
+                        stringResource(Res.string.settings_model_heading),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(top = 24.dp),
+                    )
+                    Text(
+                        stringResource(Res.string.settings_model_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+                    )
+                    ElevatedCard(Modifier.fillMaxWidth()) {
+                        ModelPicker(
+                            selected = state.draftModel,
+                            onSelect = { onAction(SettingsAction.OnChangeModel(it)) },
+                            enabled = !state.saving,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                    if (state.draftModel != state.savedModel) {
+                        Text(
+                            stringResource(Res.string.settings_model_switch_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                 }
             }
         }
@@ -170,6 +212,55 @@ fun SettingsScreen(
         )
     }
 }
+
+/** One row per [EmbeddingModel], with its size and trade-off. */
+@Composable
+private fun ModelPicker(
+    selected: EmbeddingModel,
+    onSelect: (EmbeddingModel) -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.selectableGroup()) {
+        for (model in EmbeddingModel.entries) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .selectable(selected = model == selected, enabled = enabled, role = Role.RadioButton) { onSelect(model) }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = model == selected, onClick = null, enabled = enabled, modifier = Modifier.padding(8.dp))
+                Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                    Text(model.label(), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        model.hint(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmbeddingModel.label(): String = stringResource(
+    when (this) {
+        EmbeddingModel.MOBILENET_V3_SMALL -> Res.string.model_mobilenet_v3_small
+        EmbeddingModel.MOBILENET_V3_LARGE -> Res.string.model_mobilenet_v3_large
+        EmbeddingModel.DINOV2_SMALL -> Res.string.model_dinov2_small
+    }
+)
+
+@Composable
+private fun EmbeddingModel.hint(): String = stringResource(
+    when (this) {
+        EmbeddingModel.MOBILENET_V3_SMALL -> Res.string.model_mobilenet_v3_small_hint
+        EmbeddingModel.MOBILENET_V3_LARGE -> Res.string.model_mobilenet_v3_large_hint
+        EmbeddingModel.DINOV2_SMALL -> Res.string.model_dinov2_small_hint
+    }
+)
 
 /** Lets the user pick datasets to convert to the just-saved settings; none are picked to start with. */
 @Composable

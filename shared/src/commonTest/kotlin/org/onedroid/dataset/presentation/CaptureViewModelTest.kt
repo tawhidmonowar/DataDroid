@@ -18,7 +18,8 @@ import kotlinx.coroutines.test.setMain
 import org.onedroid.dataset.core.platform.image.RgbImage
 import org.onedroid.dataset.core.platform.ml.Backbone
 import org.onedroid.dataset.core.platform.ml.BackboneLoader
-import org.onedroid.dataset.core.platform.ml.MobileNetV3Small
+import org.onedroid.dataset.core.platform.ml.spec
+import org.onedroid.dataset.domain.model.EmbeddingModel
 import org.onedroid.dataset.core.platform.ml.SharedBackbone
 import org.onedroid.dataset.data.settings.FileSettingsRepository
 import org.onedroid.dataset.data.sorting.EmbeddingImageSorter
@@ -71,7 +72,7 @@ class CaptureViewModelTest {
     /** Embeds an image as its mean color, padded to the real embedding size. */
     private val backbone = object : Backbone {
         override fun embed(input: FloatArray): FloatArray {
-            val out = FloatArray(MobileNetV3Small.EMBEDDING_SIZE)
+            val out = FloatArray(EmbeddingModel.DEFAULT.spec.embeddingSize)
             for (i in input.indices) out[i % 3] += input[i]
             return out
         }
