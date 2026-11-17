@@ -206,6 +206,31 @@ class CaptureViewModelTest {
     }
 
     @Test
+    fun theShotCountRunsOnAcrossShutterPresses() = viewModelTest {
+        val (id, red) = redAndBlue()
+        val camera = capture(id, classId = red)
+        camera.awaitState { !it.loading }
+
+        // A press counts its asked-for shot at once, then every frame it takes.
+        camera.onAction(CaptureAction.OnStartRecording)
+        assertEquals(1, camera.state.value.sessionShots)
+        camera.onAction(CaptureAction.OnCapture(fakeJpeg("one")))
+        assertEquals(1, camera.state.value.sessionShots)
+        camera.onAction(CaptureAction.OnCapture(fakeJpeg("two")))
+        camera.onAction(CaptureAction.OnCapture(fakeJpeg("three")))
+        assertEquals(3, camera.state.value.sessionShots)
+
+        // Frames after release aren't counted, and the next press carries on from there.
+        camera.onAction(CaptureAction.OnStopRecording)
+        camera.onAction(CaptureAction.OnCapture(fakeJpeg("idle")))
+        assertEquals(3, camera.state.value.sessionShots)
+        camera.onAction(CaptureAction.OnStartRecording)
+        assertEquals(4, camera.state.value.sessionShots)
+        camera.onAction(CaptureAction.OnCapture(fakeJpeg("four")))
+        assertEquals(4, camera.state.value.sessionShots)
+    }
+
+    @Test
     fun aNewDatasetStartsWithItsFirstClass() = viewModelTest {
         val id = repository.createDataset("Empty").value()
         val first = requireNotNull(repository.observeDataset(id).first()).classes.single().id

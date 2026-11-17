@@ -6,6 +6,7 @@ import kotlin.math.sin
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -55,6 +56,35 @@ class ClassMatcherTest {
         val lenient = borderline.count { matcher.match(it, strictness = 1).isUnknown }
         val strict = borderline.count { matcher.match(it, strictness = 100).isUnknown }
         assertTrue(strict > lenient, "strict left $strict unknown, lenient $lenient")
+    }
+
+    @Test
+    fun theRequiredSimilarityIsTheBarAnImageMustClear() {
+        repeat(50) {
+            val query = photo(if (it % 2 == 0) cat else direction())
+            val strict = matcher.match(query, strictness = 100)
+            val lenient = matcher.match(query, strictness = 1)
+            // Stricter needs more, and an image is unknown exactly when it falls short.
+            assertTrue(requireNotNull(strict.required) >= requireNotNull(lenient.required))
+            for (match in listOf(strict, lenient)) {
+                val required = requireNotNull(match.required)
+                if (match.similarity > required + 1e-4f) assertFalse(match.isUnknown)
+                if (match.similarity < required - 1e-4f) assertTrue(match.isUnknown)
+            }
+        }
+        // With strictness off there's no bar.
+        assertNull(matcher.match(photo(cat), strictness = 0).required)
+    }
+
+    @Test
+    fun lowerStrictnessLowersTheBarEvenForATightClass() {
+        // A class of near-identical images has the smallest radius, which scaling alone would barely move.
+        val tight = 0.12f
+        val needed = listOf(100, 75, 50, 25, 1).map { 1f - ClassMatcher.maxDistance(tight, it) }
+        assertEquals(needed.sortedDescending(), needed)
+        assertTrue(needed[0] > 0.85f, "strict needs ${needed[0]}")
+        assertTrue(needed[3] < 0.5f, "25 needs ${needed[3]}")
+        assertTrue(needed[4] <= 0.01f, "1 needs ${needed[4]}")
     }
 
     @Test

@@ -1,7 +1,17 @@
 package org.onedroid.dataset.presentation.capture
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -63,6 +73,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
@@ -74,6 +85,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -308,6 +320,41 @@ private fun Viewfinder(state: CaptureState, held: Boolean, onAction: (CaptureAct
         if (auto) {
             PredictionPill(state, Modifier.align(Alignment.BottomCenter).padding(12.dp))
         }
+        ShotCounter(
+            visible = state.recording && state.sessionShots > 0,
+            count = state.sessionShots,
+            modifier = Modifier.align(Alignment.Center),
+        )
+    }
+}
+
+/**
+ * How many images the shutter has taken since the screen opened, large in the middle of the viewfinder while
+ * it's down; each new number pops in like a countdown.
+ */
+@Composable
+private fun ShotCounter(visible: Boolean, count: Int, modifier: Modifier) {
+    AnimatedVisibility(visible = visible, enter = fadeIn(tween(SHOT_FADE_MS)), exit = fadeOut(tween(SHOT_FADE_MS)), modifier = modifier) {
+        AnimatedContent(
+            targetState = count,
+            // Each number settles before the next frame's arrives, and may draw outside the text's bounds while
+            // it's scaled up, so it's never clipped mid-animation.
+            transitionSpec = {
+                val enter = scaleIn(tween(SHOT_POP_MS, easing = FastOutSlowInEasing), initialScale = 1.6f) + fadeIn(tween(SHOT_POP_MS))
+                val exit = scaleOut(tween(SHOT_POP_MS), targetScale = 0.6f) + fadeOut(tween(SHOT_POP_MS))
+                (enter togetherWith exit).using(SizeTransform(clip = false))
+            },
+            contentAlignment = Alignment.Center,
+            label = "shotCount",
+        ) { number ->
+            Text(
+                "$number",
+                style = MaterialTheme.typography.displayLarge.copy(fontSize = 96.sp),
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.clearAndSetSemantics { },
+            )
+        }
     }
 }
 
@@ -327,7 +374,8 @@ private fun PredictionPill(state: CaptureState, modifier: Modifier) {
         match == null || closest == null -> null to stringResource(Res.string.auto_sort_point)
         match.isUnknown -> null to stringResource(Res.string.unknown_label) + " · " +
             stringResource(Res.string.auto_sort_closest, closest.name, match.percent())
-        else -> closest.colorIndex to closest.name + " · " + stringResource(Res.string.auto_sort_similar, match.percent())
+        else -> closest.colorIndex to closest.name + " · " +
+            stringResource(Res.string.auto_sort_similar, match.percent())
     }
     Surface(shape = RoundedCornerShape(16.dp), color = Color.Black.copy(alpha = 0.6f), contentColor = Color.White, modifier = modifier) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -698,6 +746,10 @@ private fun rememberHeld(recording: Boolean): Boolean {
 }
 
 private const val HOLD_TO_RECORD_MS = 250L
+
+/** Shot counter timings, shorter than the camera's frame interval so one number settles before the next. */
+private const val SHOT_POP_MS = 160
+private const val SHOT_FADE_MS = 120
 
 private fun ClassMatch.percent(): String = "${(similarity * 100).roundToInt()}%"
 

@@ -143,13 +143,7 @@ fun SettingsScreen(
                 CircularProgressIndicator(Modifier.align(Alignment.Center))
             } else {
                 Column(Modifier.widthIn(max = 720.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-                    Text(stringResource(Res.string.settings_image_heading), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        stringResource(Res.string.settings_image_body),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
-                    )
+
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         ImageSettingsForm(
                             settings = state.draft,
@@ -162,14 +156,9 @@ fun SettingsScreen(
                     Text(
                         stringResource(Res.string.settings_model_heading),
                         style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(top = 24.dp),
+                        modifier = Modifier.padding(top = 24.dp, bottom = 14.dp),
                     )
-                    Text(
-                        stringResource(Res.string.settings_model_body),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
-                    )
+
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         ModelPicker(
                             selected = state.draftModel,

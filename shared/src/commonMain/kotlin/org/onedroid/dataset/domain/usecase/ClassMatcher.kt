@@ -7,9 +7,15 @@ import kotlin.math.sqrt
 /**
  * Where an image belongs. [classId] is the class it's like, or null when it's unlike every class (unknown).
  * [closestClassId] is the nearest class either way (null only when no class has images), and [similarity]
- * how alike it is to that class, 0 to 1.
+ * how alike it is to that class, 0 to 1. [required] is the similarity that class needs at the strictness
+ * matched with, 0 to 1, or null when there's no bar (strictness off, or no class has images).
  */
-data class ClassMatch(val classId: Int?, val closestClassId: Int?, val similarity: Float) {
+data class ClassMatch(
+    val classId: Int?,
+    val closestClassId: Int?,
+    val similarity: Float,
+    val required: Float? = null,
+) {
     val isUnknown: Boolean get() = classId == null
 }
 
@@ -24,8 +30,8 @@ data class ClassMatch(val classId: Int?, val closestClassId: Int?, val similarit
  * can't drag a class towards one shot.
  *
  * Each class also gets a radius: the distance within which [COVERAGE] of its own images lie when each is
- * scored against the rest of the class. An image goes to the best-scoring class, unless it lies outside that
- * class's radius (scaled by a margin set by strictness), when it's unknown.
+ * scored against the rest of the class. An image goes to the best-scoring class, unless it lies further from it
+ * than strictness allows ([maxDistance]), when it's unknown.
  */
 class ClassMatcher private constructor(
     private val classIds: List<Int>,
@@ -57,11 +63,13 @@ class ClassMatcher private constructor(
             }
         }
         val distance = 1f - bestScore
-        val familiar = strictness <= 0 || distance <= radii[best] * marginFor(strictness)
+        val maxDistance = if (strictness <= 0) null else maxDistance(radii[best], strictness)
+        val familiar = maxDistance == null || distance <= maxDistance
         return ClassMatch(
             classId = if (familiar) classIds[best] else null,
             closestClassId = classIds[best],
             similarity = bestScore.coerceIn(0f, 1f),
+            required = maxDistance?.let { (1f - it).coerceIn(0f, 1f) },
         )
     }
 
@@ -108,14 +116,31 @@ class ClassMatcher private constructor(
             return IntArray(units.size) { grouper.add(units[it]) }
         }
 
-        /** Maps strictness 1..100 onto the radius margin: lenient accepts up to 1.3 radii, strict 0.9. */
-        internal fun marginFor(strictness: Int): Float {
-            val t = strictness.coerceIn(0, 100) / 100f
-            return LENIENT_MARGIN + (STRICT_MARGIN - LENIENT_MARGIN) * t
+        /**
+         * How far (in score distance) an image may lie from a class of [radius] and still belong to it, at
+         * [strictness] 1..100. From [DEFAULT_STRICTNESS] up it scales the radius, from 1.1 radii down to 0.9 at
+         * 100. Below that it widens towards [MAX_DISTANCE] at 1, which accepts any image, so the slider reaches
+         * all the way down even for a tight class, whose radius alone would barely move.
+         */
+        internal fun maxDistance(radius: Float, strictness: Int): Float {
+            val s = strictness.coerceIn(1, 100)
+            val atDefault = radius * marginFor(DEFAULT_STRICTNESS)
+            if (s >= DEFAULT_STRICTNESS) return radius * marginFor(s)
+            val t = (DEFAULT_STRICTNESS - s).toFloat() / (DEFAULT_STRICTNESS - 1)
+            return maxOf(atDefault, atDefault + (MAX_DISTANCE - atDefault) * t)
         }
 
-        private const val LENIENT_MARGIN = 1.3f
+        /** The radius margin from [DEFAULT_STRICTNESS] (1.1 radii) to 100 (0.9). */
+        private fun marginFor(strictness: Int): Float {
+            val t = (strictness - DEFAULT_STRICTNESS).toFloat() / (100 - DEFAULT_STRICTNESS)
+            return DEFAULT_MARGIN + (STRICT_MARGIN - DEFAULT_MARGIN) * t
+        }
+
+        private const val DEFAULT_MARGIN = 1.1f
         private const val STRICT_MARGIN = 0.9f
+
+        /** Score distance at strictness 1: similarity 0, so nothing is left unknown. */
+        private const val MAX_DISTANCE = 1f
     }
 
     /**

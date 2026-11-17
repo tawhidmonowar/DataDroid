@@ -238,8 +238,12 @@ class CaptureViewModel(
     }
 
     private fun onCapture(jpeg: ByteArray) {
-        // Frames arrive on the camera's thread; claim a pending single shot atomically.
-        val current = _state.getAndUpdate { if (it.shotPending) it.copy(shotPending = false) else it }
+        // Frames arrive on the camera's thread; claim a pending single shot, and count the shot, atomically.
+        val current = _state.getAndUpdate {
+            if (it.capturing && it.canCapture) it.copy(shotPending = false, shotCount = it.shotCount + 1)
+            else if (it.shotPending) it.copy(shotPending = false)
+            else it
+        }
         val save = current.capturing && current.canCapture
         when (val target = current.target) {
             CaptureTarget.Auto -> if (save) autoCaptures.trySend(jpeg) else previewFrames.trySend(jpeg)
