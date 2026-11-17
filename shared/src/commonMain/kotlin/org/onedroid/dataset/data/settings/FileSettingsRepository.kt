@@ -54,7 +54,7 @@ class FileSettingsRepository(
     private val record = MutableStateFlow<SettingsRecord?>(null)
 
     override fun observeImageSettings(): Flow<ImageSettings> = flow {
-        locked { }
+        if (record.value == null) locked { }
         emitAll(record.filterNotNull().map { it.imageSettings })
     }
 
@@ -62,7 +62,7 @@ class FileSettingsRepository(
         save { it.copy(imageSettings = settings.sanitized()) }
 
     override fun observeEmbeddingModel(): Flow<EmbeddingModel> = flow {
-        locked { }
+        if (record.value == null) locked { }
         emitAll(record.filterNotNull().map { it.embeddingModel }.distinctUntilChanged())
     }
 

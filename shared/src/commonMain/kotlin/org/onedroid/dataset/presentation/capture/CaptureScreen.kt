@@ -86,8 +86,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -157,6 +160,15 @@ fun CaptureRoot(
     val scope = rememberCoroutineScope()
     val pickPhotos = rememberImagePicker { images -> viewModel.onAction(CaptureAction.OnPhotosPicked(images)) }
 
+    // Binding the camera does real work on the main thread, so it waits until the screen has finished
+    // animating in (the destination is resumed then), and stays bound while the screen animates out.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var settled by remember { mutableStateOf(false) }
+    LaunchedEffect(lifecycle) {
+        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+        settled = true
+    }
+
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
             CaptureEvent.NavigateBack -> onBack()
@@ -164,7 +176,7 @@ fun CaptureRoot(
         }
     }
 
-    CaptureScreen(state = state, onAction = viewModel::onAction, onPickPhotos = pickPhotos, snackbar = snackbar)
+    CaptureScreen(state = state, onAction = viewModel::onAction, onPickPhotos = pickPhotos, snackbar = snackbar, cameraEnabled = settled)
 }
 
 /**
@@ -178,6 +190,7 @@ fun CaptureScreen(
     onAction: (CaptureAction) -> Unit,
     onPickPhotos: () -> Unit = {},
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    cameraEnabled: Boolean = true,
 ) {
     var addingClass by remember { mutableStateOf(false) }
     var showingUnknowns by remember { mutableStateOf(false) }
@@ -188,7 +201,7 @@ fun CaptureScreen(
         LightSystemBarIcons()
         Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background) { padding ->
             BoxWithConstraints(Modifier.padding(padding).fillMaxSize()) {
-                val viewfinder = @Composable { modifier: Modifier -> Viewfinder(state, held, onAction, modifier) }
+                val viewfinder = @Composable { modifier: Modifier -> Viewfinder(state, held, cameraEnabled, onAction, modifier) }
                 val controls = @Composable { modifier: Modifier ->
                     Controls(
                         state = state,
@@ -291,11 +304,11 @@ private fun TopBar(state: CaptureState, onAction: (CaptureAction) -> Unit, onSho
 
 /** Square, because captured frames are center-cropped to a square: what's shown is what's saved. */
 @Composable
-private fun Viewfinder(state: CaptureState, held: Boolean, onAction: (CaptureAction) -> Unit, modifier: Modifier) {
+private fun Viewfinder(state: CaptureState, held: Boolean, cameraEnabled: Boolean, onAction: (CaptureAction) -> Unit, modifier: Modifier) {
     val currentOnAction by rememberUpdatedState(onAction)
     val auto = state.target == CaptureTarget.Auto
     Box(modifier.background(Color.Black)) {
-        if (!state.loading) {
+        if (!state.loading && cameraEnabled) {
             CameraPreview(
                 facing = state.facing,
                 // Auto-sort reads every frame for its live label; a class only needs frames it saves.

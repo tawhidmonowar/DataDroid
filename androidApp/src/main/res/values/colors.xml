@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="blue_500">#FF2196F3</color>
+    <!-- The Compose theme's background color, light and dark (values-night). -->
+    <color name="window_background">#FFE8EAED</color>
 </resources>
