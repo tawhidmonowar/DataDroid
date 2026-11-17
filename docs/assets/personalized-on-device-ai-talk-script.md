@@ -668,28 +668,446 @@ github.com/tawhidmonowar/DataDroid
 
 **Visual:** QR code, contact details.
 
-### Likely questions and short answers
+---
 
-**Is this really transfer learning if the network never trains?**
-Yes. Using a frozen pretrained network as a feature extractor is the most common form of transfer learning. The linear head on top is a standard linear probe. What DataDroid doesn't do is fine-tune the backbone itself.
+# Appendix: Q&A preparation
+
+This appendix collects every question the audience is likely to ask, grouped by topic, with a short answer you can say out loud. Answers stick to what the code and benchmarks show. Where something hasn't been measured, the answer says so.
+
+## Handling questions
+
+- **Repeat the question** before answering, so the whole room hears it.
+- **Answer in two or three sentences**, then offer to go deeper after the session.
+- **If you don't know, say so**, and point to what *is* measured. "I haven't measured that on a phone. On the laptop it's X, and I expect a phone to be several times slower."
+- **Bridge back to the key message:** freeze the backbone, start training-free, add training as an upgrade, invest in the backbone first.
+
+## Key numbers cheat sheet
+
+| Fact | Value |
+| --- | --- |
+| Shared Kotlin in `commonMain` | about 87% (about 9,600 lines) |
+| Android model wrapper / iOS model wrapper | 34 lines / 79 lines |
+| Model input | 224×224 RGB, NHWC, values in [0, 1] (150,528 floats) |
+| MobileNetV3-Small / Large / DINOv2 ViT-S/14 | ~4 MB, 1,024-d / ~11 MB, 1,280-d / ~23 MB, 384-d |
+| All three bundled models | about 38 MB |
+| DINOv2 export | 87 MB → 23 MB, int8 weights, cosine similarity about 0.996 to PyTorch |
+| Burst capture | about 5 frames a second, 640×640 squares |
+| Near-duplicate threshold | cosine similarity ≥ 0.85 |
+| Hybrid score | ½ centroid + ½ mean of the 5 nearest images |
+| Radius | 0.8 quantile of leave-group-out distances, up to 32 probes, needs 5 groups |
+| Strictness slider | 0 = off, default 50, margin 1.3 (lenient) to 0.9 (strict) |
+| Head trains when | at least 2 classes and every class has ≥ 10 distinct images |
+| Head training | 30 epochs, full batch, momentum 0.9, learning rate 0.06, temperature 10, regularisation 0.02, at most 48 examples per class |
+| Matcher vs plain nearest-class-mean | +2.0 points on average (MobileNetV3-Small) |
+| Head gain | +1.2 / +0.5 points (Small, Flowers / Imagewoof), +0.2 / +0.5 points (DINOv2) |
+| Backbone swap, Small → DINOv2 | Flowers 80.7% → 94.8%; Imagewoof 82.2% → 89.2% |
+| DINOv2 at 5 photos per class (Flowers) | 92.0% |
+| Unknowns rejected at default strictness (Flowers) | 15.1% (Small) vs 83.3% (DINOv2) |
+| DINOv2 speed | about 20 to 40 times slower per image than Small |
+| Refit time (laptop JVM, from scratch) | 9 ms at 250 images, 176 ms at 2,000, 1,071 ms at 5,800 |
+| Match one image (laptop JVM) | 0.2 ms at 250 images, 4.3 ms at 5,800 |
+| Embedding cache per image | 1,024 floats × 4 bytes ≈ 4 KB (Small) |
+
+---
+
+## 1. Transfer learning and machine learning concepts
+
+**Is this app using transfer learning?**
+Yes. A network pretrained on millions of images is reused as a frozen feature extractor, and a linear layer is trained on its outputs on the phone. That second part is what the literature calls a linear probe. The app never fine-tunes the backbone's own weights.
+
+**Is it really transfer learning if the network never trains?**
+Yes. Feature extraction with a frozen network is the most common form of transfer learning. The knowledge transferred is the embedding space. Fine-tuning is just one way of transferring, not the definition.
+
+**What's the difference between feature extraction, a linear probe and fine-tuning?**
+Feature extraction runs the frozen network and uses its output vectors. A linear probe trains one linear layer on those vectors, with the network still frozen. Fine-tuning updates the network's own weights, either all layers or the last few. DataDroid does the first two.
 
 **Why not fine-tune the backbone on the phone?**
-With 5 to 50 images per class it would overfit, it needs backpropagation through millions of weights, and it would have to rerun after every shutter press. The benchmarks also show the trained head adds only 0.2 to 1.2 points over the training-free matcher, so a deeper fine-tune is unlikely to pay for its cost.
+Three reasons. With 5 to 50 images per class it would overfit. It needs backpropagation through millions of weights, which is slow and memory-hungry on a phone. And the dataset changes five times a second during a burst, so it would never catch up. The benchmarks also show a trained linear layer adds only 0.2 to 1.2 points, so deeper training is unlikely to pay for itself.
 
-**Why does the trained head add so little?**
-Embeddings from a good backbone are already well separated by their centroids, so a linear layer has little left to fix. The head helps most where classes share a large variation that isn't related to class, which the synthetic test isolates.
+**Is this few-shot learning?**
+Yes, in the practical sense: a class works from one image and gets useful at about five. The matcher is closest to the nearest-centroid and nearest-neighbour baselines from the few-shot literature, especially SimpleShot. There's no meta-learning or episodic training.
 
-**How fast is it on a real phone?**
-Not measured yet. All timings are from a laptop JVM. A full refit from scratch takes about 9 ms for 250 images and about 1 s for 5,800 on that laptop, and matching one image takes 0.2 to 4.3 ms. Expect a mid-range phone to be several times slower, which is why refits are incremental and conflated.
+**How is this different from prototypical networks?**
+Prototypical networks also classify by distance to class prototypes, but they train the embedding network with episodes so that prototypes work well. Here the embedding network is fixed and nothing is meta-trained. The prototypes are just centroids of the user's own images.
 
-**Why not use the GPU or NNAPI or Core ML?**
-Hardware delegates haven't been tested. Inference runs on the CPU with 4 threads. It's a clear next step, especially for DINOv2.
+**Is this continual learning? What about catastrophic forgetting?**
+The backbone is frozen, so it can't forget anything. The matcher and head are refitted from all of the user's current images every time, so there's nothing to forget either. The price is that refit cost grows with the dataset, which is why grouping is incremental and head training is capped at 48 examples per class.
 
-**Does any data leave the device?**
-No. There's no server and no network call in the sorting path. Models are bundled in the app, which is why it's about 38 MB of models.
+**What is an embedding, in one sentence?**
+A fixed-length vector a network produces for an image, arranged so that images that look alike get vectors that point in similar directions.
 
-**How does it handle a new object that isn't in any class?**
-The per-class radius, measured with each group left out, decides whether the image belongs to the closest class at all. The "Unknown detection" slider sets the margin. Rejected images are kept as unknowns for the user to file later.
+**Why cosine similarity and not Euclidean distance?**
+Embeddings are normalised to unit length, so the dot product is the cosine similarity, and for unit vectors cosine and Euclidean distance rank neighbours the same way. Cosine is cheap: one dot product per comparison.
+
+**Is this federated learning?**
+No. Nothing is shared between devices or sent to a server. Each phone learns only from its own user's images. Federated learning would be a way to improve the *backbone* across users, which is a different problem.
+
+**Is this "AI" or just nearest neighbours?**
+Both. The heavy lifting is a deep network that learned visual features from millions of images. The personal part on top is deliberately simple, because simple methods work from one example and update in milliseconds. The trained head is real gradient descent, just on one layer.
+
+**Would this approach work for audio, text or sensor data?**
+The matcher and head only see vectors, so they don't care where the vectors come from. Swap the image backbone for an audio or text embedder and the same recipe applies. The burst threshold and radius settings would need re-measuring for that embedder.
+
+---
+
+## 2. Backbones and models
+
+**Which models does the app use?**
+Three bundled backbones, chosen in Settings: MobileNetV3-Small (default, about 4 MB), MobileNetV3-Large (about 11 MB) and DINOv2 ViT-S/14 (about 23 MB). The two MobileNets are Google MediaPipe image embedders. DINOv2 is converted from Meta's weights by a script in the repository.
+
+**Why is MobileNetV3-Small the default if DINOv2 is so much better?**
+Speed. DINOv2 is roughly 20 to 40 times slower per image, and live sorting runs at camera speed. Small works well enough on every phone. DINOv2 is an opt-in for users who want accuracy and have a fast phone.
 
 **Why is DINOv2 so much better?**
-It's self-supervised and trained to produce features that work well for nearest-neighbour retrieval, which is exactly how the matcher uses them. MobileNet embeddings come from models trained to classify ImageNet labels.
+It's self-supervised, and its features are known to work well for nearest-neighbour retrieval, which is exactly how the matcher uses them. The MobileNet embedders come from networks trained to classify ImageNet labels. Supervised features tend to emphasise what separates those 1,000 labels, not the user's own categories.
+
+**DINOv2's embedding is only 384 numbers. How can it beat a 1,024-number embedding?**
+Size isn't quality. What matters is how well the space separates things. DINOv2's 384 dimensions carry more useful structure than MobileNet's 1,024.
+
+**Why is MobileNetV3-Large no better than Small on Flowers?**
+It improved Imagewoof from 82.2% to 88.3% but not Flowers (80.7% to 80.8%). I don't have a confirmed explanation. One guess is that Large's extra capacity helps fine-grained dog breeds, which are ImageNet classes, more than flowers.
+
+**How did you get a vision transformer to run on a phone?**
+The export script does three things. It bakes ImageNet normalisation into the graph, so the input contract stays the same. It resizes DINOv2's position embeddings once for 224 px and freezes them, instead of resizing on every forward pass. And it quantises weights to int8 with float activations. The file goes from 87 MB to 23 MB.
+
+**Did quantisation hurt accuracy?**
+No, not measurably. The int8-weight model scores within 0.1 point of the float32 export on both datasets, with a cosine similarity of about 0.996 to the PyTorch output.
+
+**Why not full int8 quantisation, including activations?**
+Full int8 would need a calibration dataset and could be faster on int8 kernels, but it's riskier for accuracy, especially for transformers. Weight-only quantisation got the file size down with no measurable loss, so I stopped there. Full int8 is untested.
+
+**Why not quantise MobileNetV3-Small too?**
+It's already about 4 MB in float32, so there was little to gain in size. It hasn't been tried.
+
+**Why 224×224 input?**
+It's the input size all three models were trained or exported for. Captures are 640×640 squares and are scaled down for the model.
+
+**Why not CLIP or MobileCLIP?**
+That's the top item on the future list. A CLIP-style encoder adds text, so you could create a class by name and sort into it before it has any images. It hasn't been integrated yet.
+
+**What happens to embeddings when a user switches models?**
+Embeddings from different models aren't comparable, so each model has its own cache file per dataset. Switching re-analyses the dataset once with the new model. Switching back is free because the old cache is still there. A matcher also records the embedding length it was fitted on, so vectors from different models are never compared.
+
+**Can users bring their own model?**
+Not today. The design makes it easy to add: a model is one `BackboneSpec` with a file path, input size, embedding size and cache name, as long as it takes 224×224 RGB in [0, 1].
+
+**How are models updated?**
+They're bundled in the app, so a new model ships with an app update. Downloading models on demand would cut app size but would break the "no network at all" property.
+
+---
+
+## 3. The training-free matcher
+
+**Why start with nearest class mean?**
+It works from one image, updating it means changing an average, and with good embeddings it's a strong baseline. It's the right tool for the first minute of a new class, when personalization matters most.
+
+**What was wrong with plain nearest class mean?**
+Three things in real use. Bursts dragged a class towards one moment. Classes with several looks got a centroid between the looks that matched neither. And it almost never said "unknown".
+
+**How does burst grouping work?**
+Within each class, an image joins the first earlier group whose leader it resembles with cosine similarity of at least 0.85. Otherwise it starts a new group. Each image then gets weight 1 divided by its group size, so a ten-frame burst weighs the same as one photo.
+
+**Why 0.85?**
+It was measured. With MobileNetV3-Small, simulated neighbouring burst frames score at least 0.86 against their source in 95% of cases. The most similar *distinct* photo in the same dataset passes 0.68 to 0.75 only 5% of the time. A cut at 0.85 separates them almost completely.
+
+**Is 0.85 right for DINOv2 too?**
+It was tuned on MobileNetV3-Small and reused unchanged for the other backbones. DINOv2 still performed much better with it, but a per-backbone threshold might do better still. That's an open item.
+
+**What if two genuinely different photos are grouped as a burst?**
+They'd share weight, so the class counts them as one example. With a 0.85 threshold that's rare for distinct photos, as the measurement shows. The cost of a wrong merge is small: a slightly under-weighted image, not a wrong label.
+
+**What does centring do?**
+All of one user's photos share lighting, background and framing, which inflates every similarity. Centring subtracts the dataset's weighted mean from every embedding and renormalises, so scores reflect what differs between classes. It's the "CL2N" trick from SimpleShot. With only one class it's skipped, since there's nothing to contrast.
+
+**Does centring always help?**
+No. In the ablation it helps a lot with five photos per class (Flowers 61.6% to 67.2%) and is neutral or slightly harmful with large classes. It hurts in burst scenarios *without* grouping, because burst-heavy classes bias the mean. With grouping on, it's roughly neutral on average and helps the hybrid score.
+
+**Why blend the centroid with nearest neighbours instead of using one?**
+The centroid is stable when a class is small. The neighbours follow classes with several looks. In the ablation, neighbours alone were best on Flowers but worst on Imagewoof. The 50/50 blend was the most robust across both.
+
+**Why five neighbours?**
+It's the neighbour count chosen on the evaluation datasets. Neighbours are counted by weight, so a whole burst counts as at most one of the five.
+
+**Which part of the matcher helped most?**
+Burst grouping was the most consistent. It added 1.4 to 4.2 points in burst scenarios and never cost more than 0.1 point elsewhere. On Imagewoof, centroid plus grouping alone matched the full method.
+
+**What does a fit actually do, if not training?**
+It groups near-duplicates, computes weighted centroids and a dataset mean, and measures each class's radius with a few leave-group-out probes. That's grouping, weighted sums and dot products. No gradients.
+
+---
+
+## 4. The linear head trained on the device
+
+**What does the head add that the matcher can't do?**
+A centroid is computed from one class alone and never looks at the other classes. A trained linear layer does. If two classes differ in a small detail but share a large variation, like lighting, the head can learn to ignore the shared variation.
+
+**How big is it?**
+One weight vector per class, the size of the embedding. For five classes of 1,024-dimensional embeddings that's 5,120 numbers.
+
+**Why initialise at the class centroids?**
+So that before the first training step, the head is exactly the nearest-centroid classifier. Training can only move away from a sensible answer, never towards one from random noise.
+
+**Why regularise towards the centroid instead of towards zero?**
+Standard L2 regularisation pulls weights to zero, which is meaningless here. Pulling towards the centroid means that with little data the head stays close to nearest-centroid, and with more data the data wins. The worst case is roughly what you already had.
+
+**Why full-batch gradient descent with momentum, not Adam or SGD?**
+The problem is tiny and fits in memory, so full batches are cheap. Full batch with no shuffling and no random initialisation makes training deterministic: the same images always give the same head. That makes it testable and makes bugs reproducible.
+
+**Why a temperature of 10?**
+Embeddings and weights are unit-length, so raw dot products sit between −1 and 1. A softmax over values that close is too flat to learn from. Multiplying by 10 sharpens it.
+
+**Why is the loss class-balanced?**
+Datasets being built are lopsided. Each class shares an equal part of the loss, so a class with 200 images and one with 12 count the same.
+
+**Why does it only train at 10 distinct images per class?**
+Below that, a trained layer is likely to overfit, and the training-free matcher does as well or better. The benchmark shows the cutoff working: with five photos per class the head never trains and results are identical to the matcher.
+
+**Why "distinct" images?**
+A burst of thirty frames is one moment, not thirty examples. Each near-duplicate group is averaged into one training example, using the same grouping as the matcher.
+
+**Why cap training at 48 examples per class?**
+To bound the cost of a refit however large the dataset gets. The 48 are an even spread across the class's groups.
+
+**Is the head retrained every time the dataset changes?**
+Yes. It's refitted from scratch with the matcher whenever the dataset changes. Refits are conflated, so during a burst only the latest dataset state is fitted.
+
+**How long does head training take on a phone?**
+Not measured, and that's one of the stated limitations. As a rough size: ten classes at the 48-example cap with 1,024-dimensional embeddings is a few hundred million multiply-adds over 30 epochs. That runs in the background and doesn't block the camera, because the previous matcher keeps sorting until the new one is ready.
+
+**Why does the head add so little on real data?**
+Embeddings from a good backbone are already well separated by their centroids, so a linear layer has little left to fix. On a synthetic test built for the case it targets, it goes from under 80% to over 95%. Real photos are less dramatic.
+
+**Then why keep it?**
+It never makes things worse on average, it helps in the cases centroids can't handle, and it's cheap. It also makes personalization deepen as the user does more work.
+
+**Can the head say "this is none of my classes"?**
+No. A softmax always picks some class. So the head only decides *which* class, and the radius from the matcher still decides *whether* the image belongs there.
+
+**Why not use the softmax probability as a confidence threshold?**
+Maximum-softmax-probability is a known baseline for rejecting unknowns, but softmax scores are often overconfident on inputs far from the training data. A distance-based radius measured per class was already working, and keeping it separate meant adding the head didn't change unknown detection at all.
+
+**Why not use the platform's on-device training APIs, such as Core ML updatable models or TensorFlow Lite on-device training?**
+They would put the learning code back into platform-specific code and give different behaviour on Android and iOS. The head is small enough that about a hundred lines of plain Kotlin train it, identically on both platforms.
+
+---
+
+## 5. Unknown detection
+
+**How does the app decide an image belongs to no class?**
+Each class has a radius: how far its own images typically land from it. An image is accepted only if its distance to the best class is within that radius times a margin. Otherwise it goes to the Unknown list.
+
+**What's wrong with measuring the radius directly?**
+An image scored against a centroid that already contains it always looks close. The radius comes out too small, and the margin needed to compensate ends up accepting everything. So each group is scored against the class with that group removed, and the radius is the 0.8 quantile of those distances.
+
+**What does the "Unknown detection" slider do?**
+It sets the margin, from 1.3 radii at the lenient end to 0.9 at the strict end. Zero turns rejection off. The default is 50.
+
+**What about a class with only one or two images?**
+A class with fewer than five distinct groups can't measure its own spread, so it borrows the median radius of the other classes. If no class can measure one yet, a fixed fallback radius is used.
+
+**How well does it work?**
+At the default setting, MobileNetV3-Small rejects 15% of images from an unseen Flowers class and 25% on Imagewoof. DINOv2 rejects 83% and 65%, while keeping about the same share of known images. The backbone matters far more than the rule.
+
+**Why is rejecting unknowns still hard?**
+The benchmark's unknowns are *sibling* classes: another flower, another dog breed. That's the hardest case there is. Even at maximum strictness with MobileNet, 17% to 20% of them are accepted into a neighbouring class. Unrelated objects are easier.
+
+**What happens to unknown images?**
+They're kept on disk under Unknown, so closing the camera or the app loses none. From there the user can start a new class with them, add them to an existing class, or discard them. Exports put them in a separate `unknown` folder so training tools don't mistake them for a class.
+
+---
+
+## 6. Evaluation and results
+
+**How did you evaluate it?**
+Leave-one-group-out on two public datasets, TF Flowers (5 classes) and Imagewoof (10 similar dog breeds). 120 photos per class, 20 of them with four simulated burst frames. Five scenarios from 5 photos per class to 30 photos plus bursts, each drawn 10 times, with paired 95% confidence intervals.
+
+**Why leave-one-group-out instead of plain leave-one-out?**
+With bursts, plain leave-one-out leaves the held-out frame's siblings in the training set, and any classifier looks perfect. Removing the whole near-duplicate group gives an honest estimate of how a genuinely new photo is classified.
+
+**Did you benchmark the real app code?**
+Yes. The benchmark is a JVM unit test, `MatcherBenchmark`, that runs the shipped Kotlin matcher on embeddings from the exact `.tflite` files in the app. The ablation used a NumPy re-implementation with the same rules, so its absolute numbers differ slightly.
+
+**How were bursts simulated?**
+Each burst frame is a square crop of 88% to 98% of the short side, shifted by up to 4%, with brightness scaled by 0.9 to 1.1. Five frames per burst, matching about one second of holding the shutter.
+
+**Are simulated bursts realistic?**
+Not fully. They don't model motion blur, focus hunting or changing backgrounds. Real bursts may group less cleanly. A benchmark of real burst captures is on the future list.
+
+**Are the results statistically significant?**
+For the matcher against plain nearest-class-mean, five of ten comparisons have a 95% interval that excludes zero, all positive. For the head, three of ten with MobileNet and two of ten with DINOv2, all positive. The draws share a pool of 120 photos per class, so they aren't independent and the intervals are somewhat optimistic. Win counts are reported alongside.
+
+**Weren't the thresholds tuned on the same data you evaluated on?**
+Yes, and that's a stated limitation. The duplicate threshold, neighbour count, radius coverage and margins were chosen on these two datasets. That biases results in the matcher's favour. Evaluating on a separate set of datasets would give a cleaner estimate.
+
+**Could the backbone have seen your test images during pretraining?**
+Possibly. Imagewoof's breeds are ImageNet classes and its images come from the ImageNet training set. That likely helps both matchers and may understate the benefit on genuinely new domains.
+
+**Why only two datasets?**
+They cover an easy-ish coarse task and a hard fine-grained one, and both are public. More domains, especially non-ImageNet ones, would make the results stronger.
+
+**Did you run a user study?**
+No. The benchmarks measure classification quality, not time saved for users or how they react to rejections.
+
+**What's the single most important result?**
+Better features beat cleverer matching. Swapping MobileNetV3-Small for DINOv2 added 14 points on Flowers. All the matcher work added about 2 to 3, and the head about 1.
+
+**What's the accuracy with five photos per class?**
+On Flowers, 71.6% with MobileNetV3-Small and 92.0% with DINOv2. On Imagewoof, 74.6% and 83.0%.
+
+---
+
+## 7. Performance and mobile engineering
+
+**How fast is it on a real phone?**
+Not measured yet. All timings are from a laptop JVM on an Apple M3 Pro. There, a full refit takes about 9 ms at 250 images and about 1 s at 5,800, and matching one image takes 0.2 to 4.3 ms. Expect a mid-range phone to be several times slower.
+
+**How does it keep up with five frames a second?**
+Four things. Each image is embedded once and cached. Frames being saved reuse the embedding computed to sort them. Refits run off the UI thread and are conflated, so only the latest dataset state is fitted. And the previous matcher keeps sorting frames until the new one is ready.
+
+**What does `conflate()` do here?**
+It's a Kotlin Flow operator that drops intermediate values while the collector is busy. If the dataset changes five times during one refit, only the latest state is fitted next. Without it, refits would pile up behind a burst.
+
+**Are refits incremental?**
+Partly. Grouping near-duplicates is most of the cost, and `ClassMatcher.Fitter` keeps each class's groups between fits. A class that only gained images at the end, which is what a camera does, only groups the new ones. Radii and the head are recomputed.
+
+**How does the embedding cache work?**
+A small binary file per dataset and model: a magic number, the embedding size, then one record per image (an ID and its floats). New embeddings are appended. A record cut short by a crash is dropped on load. Deleted images' records are compacted away once the file is more than twice the live size. Any write failure deletes the cache and the app carries on.
+
+**How much storage and memory do embeddings use?**
+About 4 KB per image with MobileNetV3-Small (1,024 floats × 4 bytes), and about 1.5 KB with DINOv2. A 5,000-image dataset is about 20 MB with the default model.
+
+**How do you avoid embedding the same frame twice?**
+Embeddings of frames about to be saved wait in a 512-entry LRU map keyed by the image's content: its size plus two independent hashes (CRC-32 and a content hash). When the saved image appears in the dataset, its embedding is claimed by its bytes.
+
+**What stops the live preview label from slowing down saves?**
+Preview frames and captures compete for one interpreter. A coroutine `select` takes captures first, because `select` is biased towards its first clause. Under load the live label gets slower, and saved images don't.
+
+**Is the interpreter thread-safe?**
+No. One interpreter is loaded lazily and shared, and a `Mutex` serialises inference.
+
+**What was the hardest bug class?**
+Native memory and coroutine cancellation. Cancelling a coroutine doesn't stop native inference that's already running, so closing the interpreter on cancel could free memory mid-run. Close only runs when the mutex is free; otherwise the running inference closes it when it finishes. Loading runs under `NonCancellable` so an abandoned interpreter is still freed.
+
+**Any iOS-specific traps?**
+`TfLiteModelCreate` doesn't copy the model buffer. Pinning a Kotlin `ByteArray` only for the call leaves the interpreter reading freed memory later. The model is copied to the native heap and freed after the interpreter is closed.
+
+**What about battery use?**
+Not measured. Inference runs on the CPU with four threads. Each stored image is only embedded once, which helps. Live preview labelling does cost inference per preview frame while the camera is open.
+
+**Does it use the GPU, NNAPI or Core ML?**
+No. Inference is CPU-only with four threads. Hardware delegates are untested and are an obvious next step, especially for DINOv2.
+
+**How does it scale to many classes or large datasets?**
+Matching is linear in the number of images; refits grow faster than linearly, reaching about 1 s at 5,800 images on the laptop. Accuracy was evaluated with up to 10 classes and 2,000 images. Much larger datasets would need more incremental fitting.
+
+**Does the app work offline?**
+Completely. There's no server and the models are bundled.
+
+---
+
+## 8. Kotlin Multiplatform and architecture
+
+**Why Kotlin Multiplatform?**
+So the learning code is written once and behaves identically on Android and iOS. About 87% of the Kotlin is shared, including preprocessing, the cache, the matcher, the head and the evaluator. Only the camera, image codecs, pickers, share sheet, zip inflation and the model runtime are per platform.
+
+**What runs the model on each platform?**
+LiteRT (formerly TensorFlow Lite) on Android, and the TensorFlow Lite C API through Kotlin/Native cinterop on iOS. The same `.tflite` file serves both, loaded from Compose Multiplatform resources.
+
+**How does iOS get TensorFlow Lite without CocoaPods?**
+A Gradle task downloads the `TensorFlowLiteC` 2.17.0 xcframework on the first build, the same archive the official CocoaPod uses. The cinterop definition is three lines.
+
+**Why not MediaPipe Tasks, ML Kit, ONNX Runtime or ExecuTorch?**
+The app only needs raw tensors in and an embedding out. The LiteRT interpreter on Android and the TFLite C API on iOS do that with the same model file and very little code. The bundled MobileNets are already TFLite models. The other runtimes weren't evaluated.
+
+**Do Android and iOS give exactly the same results?**
+The matcher, head and preprocessing are the same Kotlin code, so they behave the same. The model runtimes differ (LiteRT on Android, TFLite C 2.17.0 on iOS), so embeddings could differ in the last few decimal places. That isn't benchmarked.
+
+**How is the model abstracted?**
+A `Backbone` interface with one method, `embed(input: FloatArray): FloatArray`, and a `BackboneLoader` that Koin provides per platform. Everything above it is shared.
+
+**How do you test ML code without a model?**
+Tests pass a fake `Backbone` that returns an image's mean colour and counts its calls, which is how "each image is embedded once" is asserted. Matcher and head tests use seeded random vectors. The shared test suite runs on the JVM and on the iOS simulator.
+
+**How do you test something non-deterministic?**
+The learning code is deterministic on purpose. Grouping, centroids and radii have no randomness, and head training uses no random initialisation or shuffling. Tests use fixed seeds for their synthetic data.
+
+---
+
+## 9. Privacy, product and practical use
+
+**Does any data leave the device?**
+No. There's no server, no upload and no network call in the sorting path. Models are bundled in the app.
+
+**Why not use the cloud as a fallback for better accuracy?**
+It would cost a backend and the user's privacy, and it would break offline use. The results also show a better on-device backbone (DINOv2) gets most of the accuracy a bigger model would give.
+
+**What does the user actually see?**
+A camera with an **Auto** chip. A live label shows the closest class and its similarity. Captures go straight to that class, or wait under Unknown. There's one slider for unknown detection and one setting for the model. There's no "Train" button.
+
+**What if auto-sort puts an image in the wrong class?**
+The user moves it to the right class. That changes the dataset, which triggers a refit, so the correction immediately becomes part of what the matcher learns from. The cached embedding is reused, so the move costs no inference.
+
+**What does the user get at the end?**
+A zip of class folders with a `metadata.json`, which standard training tools read directly. Auto-sort is a labelling aid; the output is a dataset for training a model elsewhere.
+
+**Can you export the trained head or the matcher?**
+Not today. The export is the labelled dataset. Exporting the matcher would be possible since it's just vectors and radii.
+
+**What phones does it support?**
+Android 7.0 (API 24) and newer, and iOS 18.2 and newer, on phones and tablets.
+
+**How much does the app's size grow because of the models?**
+About 38 MB for all three. MobileNetV3-Small alone is about 4 MB.
+
+**What's the licence?**
+Apache 2.0. The bundled DINOv2 and MediaPipe models are also Apache 2.0.
+
+**Who is this for?**
+Anyone building an image classification dataset: students, researchers, hobbyists, and teams collecting data for a custom model. More broadly, the recipe is for any app developer who wants personalization without a backend.
+
+---
+
+## 10. Limitations, future work and comparisons
+
+**What are the biggest limitations?**
+Thresholds were tuned on one backbone and on the evaluation data. Bursts were simulated. There are no on-device timings. The head's gain is small and its training cost on a phone is unmeasured. Inference is CPU-only. And the three models cost about 38 MB.
+
+**What would you do next?**
+A CLIP-style encoder so a class can be created by name before it has images. On-device timing and hardware delegates. Showing users an estimated accuracy for their own dataset using the leave-one-out evaluator that's already in the code. A real-burst benchmark. And temporal smoothing of the live label across frames.
+
+**How does this compare with Apple Photos or Google Photos recognising my pets and people?**
+Those systems recognise categories the vendor defined, or cluster faces with purpose-built models. DataDroid learns arbitrary categories the user invents, from a handful of examples, with a general-purpose backbone.
+
+**How does this compare with Teachable Machine?**
+The idea is similar: a frozen pretrained network with a small trainable part on top. DataDroid runs entirely on the phone in a native app, handles bursts and unknowns explicitly, and evaluates itself with leave-one-group-out.
+
+**What would you do differently if starting again?**
+Start with the backbone comparison. The benchmarks show a better backbone was worth several times more than the matcher work.
+
+**What's the one thing the audience should try in their own apps?**
+Freeze a good backbone and start with nearest-centroid on its embeddings. It works from one example, needs no training infrastructure, and is a strong baseline before you add anything clever.
+
+---
+
+## 11. Challenging questions
+
+**Isn't the trained head over-engineering for a 1-point gain?**
+It's about a hundred lines, it never makes things worse on average, and it helps in the cases centroids can't handle. But the honest answer is yes, the backbone matters far more. That's why the talk ends with "spend effort on the backbone first".
+
+**Your matcher improvements are only 2 points. Why bother?**
+The accuracy gain is modest, but the bigger change is unknown detection: rejection of unseen Flowers images went from 2.1% to 15.1% with the same backbone. And the gains land where users feel them: tiny classes and bursts.
+
+**Why should we trust laptop benchmarks for a mobile talk?**
+The *accuracy* numbers don't depend on the device, because the same Kotlin code and model files run on both. The *timing* numbers do, and I've said clearly that those are laptop numbers and phone timings are still to be measured.
+
+**Couldn't you get the same result by just fine-tuning in the cloud?**
+Probably similar accuracy, with more infrastructure, a network round trip, and the user's photos on someone else's server. The point of the talk is how far you get without any of that.
+
+**Is cosine similarity on 1,024 dimensions meaningful? Doesn't the curse of dimensionality hurt?**
+Embedding spaces from trained networks have far lower effective dimension than their size. The benchmarks show the similarities are informative in practice, and centring improves them further by removing the shared direction.
+
+**What happens when the user's classes are visually almost identical, like left shoe and right shoe?**
+That's the hardest case for any method built on general features. It's like Imagewoof's dog breeds, where accuracy is lower. A stronger backbone helps most, and the trained head can help when the classes share a large variation unrelated to the difference.
+
+**Why should anyone believe the 0.85 burst threshold generalises?**
+It's measured on simulated bursts with one backbone, so it might not. The cost of being slightly wrong is small: a few frames under- or over-weighted, not wrong labels. A real-burst benchmark is the right way to check.
