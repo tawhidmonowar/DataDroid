@@ -81,7 +81,7 @@ class SettingsViewModel(
                         val dataset = datasetRepository.observeDataset(summary.id).first() ?: return@mapNotNull null
                         DatasetChoiceUi(dataset.id, dataset.name, dataset.imageCount, matches = dataset.imageSettings == current.draft)
                     }
-                    _state.update {
+                    _state.update { it ->
                         it.copy(saving = false, saved = current.draft, applyChoices = choices.takeIf { c -> c.any { !it.matches } })
                     }
                     _events.send(SettingsEvent.ShowMessage(UiText.Resource(Res.string.message_settings_saved)))
