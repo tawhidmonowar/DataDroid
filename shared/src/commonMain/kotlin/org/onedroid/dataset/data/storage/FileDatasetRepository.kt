@@ -69,8 +69,10 @@ class FileDatasetRepository(
     /** Null until first loaded from disk. */
     private val records = MutableStateFlow<Map<String, DatasetRecord>?>(null)
 
+    // Once records are in memory, observers get them straight away rather than after a hop to the IO
+    // dispatcher, so a screen opening has its content for its first frame instead of a loading state.
     override fun observeDatasets(): Flow<List<DatasetSummary>> = flow {
-        locked { }
+        if (records.value == null) locked { }
         emitAll(
             records.filterNotNull().map { all ->
                 all.map { (id, record) -> record.toSummary(id) }
@@ -80,7 +82,7 @@ class FileDatasetRepository(
     }.distinctUntilChanged()
 
     override fun observeDataset(id: String): Flow<Dataset?> = flow {
-        locked { }
+        if (records.value == null) locked { }
         emitAll(records.filterNotNull().map { it[id] }.distinctUntilChanged().map { it?.toDataset(id) })
     }
 

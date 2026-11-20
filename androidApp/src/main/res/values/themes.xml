@@ -3,6 +3,8 @@
     <style name="Theme.DataDroid" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Matches the app's background, so nothing light flashes behind a screen change in dark mode. -->
+        <item name="android:windowBackground">@color/window_background</item>
     </style>
 
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">

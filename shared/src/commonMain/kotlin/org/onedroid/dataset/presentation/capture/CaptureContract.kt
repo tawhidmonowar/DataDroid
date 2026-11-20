@@ -25,6 +25,8 @@ data class CaptureState(
     val recording: Boolean = false,
     /** A tap on the shutter asked for one image, which the next frame provides. */
     val shotPending: Boolean = false,
+    /** Frames the shutter has taken since the screen opened. */
+    val shotCount: Int = 0,
     val autoSort: AutoSortStatus = AutoSortStatus(),
     /** How alike an image must be to a class for auto-sort to put it there; 0 never leaves it unknown. */
     val strictness: Int = ClassMatcher.DEFAULT_STRICTNESS,
@@ -51,6 +53,9 @@ data class CaptureState(
     val capturing: Boolean get() = recording || shotPending
 
     val savedCount: Int get() = saved.values.sum()
+
+    /** Images the shutter has taken since the screen opened, counting the one a tap has asked for but not yet taken. */
+    val sessionShots: Int get() = shotCount + if (shotPending) 1 else 0
 }
 
 /** An image added while the capture screen is open. */

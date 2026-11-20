@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -275,7 +276,9 @@ fun DatasetDetailScreen(
             snackbarHost = { SnackbarHost(snackbar) },
             containerColor = MaterialTheme.colorScheme.background,
         ) { padding ->
-            Crossfade(state.loading, Modifier.padding(padding).fillMaxSize(), label = "dataset") { loading ->
+            // Consumed as insets so the content's imePadding only adds the keyboard height the bottom bar
+            // doesn't already cover; otherwise the bar's height shows as a gap above the keyboard.
+            Crossfade(state.loading, Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize(), label = "dataset") { loading ->
                 if (loading) {
                     LoadingState(Modifier.fillMaxSize())
                 } else {

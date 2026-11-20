@@ -1,5 +1,5 @@
 ---
-title: "DataDroid: An Image Dataset Builder for Mobile Devices Using Frozen-Backbone Embeddings to Auto-Label Images"
+title: "DataDroid: An Image Dataset Builder App for Mobile Devices Using Frozen-Backbone Embeddings to Auto-Label Images"
 author:
   - name: Tawhid Monowar
     affiliation: "[Affiliation]"

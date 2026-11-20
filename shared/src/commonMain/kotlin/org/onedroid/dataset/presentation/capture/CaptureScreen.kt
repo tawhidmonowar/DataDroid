@@ -1,7 +1,17 @@
 package org.onedroid.dataset.presentation.capture
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -63,6 +73,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
@@ -74,8 +85,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -145,6 +160,15 @@ fun CaptureRoot(
     val scope = rememberCoroutineScope()
     val pickPhotos = rememberImagePicker { images -> viewModel.onAction(CaptureAction.OnPhotosPicked(images)) }
 
+    // Binding the camera does real work on the main thread, so it waits until the screen has finished
+    // animating in (the destination is resumed then), and stays bound while the screen animates out.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var settled by remember { mutableStateOf(false) }
+    LaunchedEffect(lifecycle) {
+        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+        settled = true
+    }
+
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
             CaptureEvent.NavigateBack -> onBack()
@@ -152,7 +176,7 @@ fun CaptureRoot(
         }
     }
 
-    CaptureScreen(state = state, onAction = viewModel::onAction, onPickPhotos = pickPhotos, snackbar = snackbar)
+    CaptureScreen(state = state, onAction = viewModel::onAction, onPickPhotos = pickPhotos, snackbar = snackbar, cameraEnabled = settled)
 }
 
 /**
@@ -166,6 +190,7 @@ fun CaptureScreen(
     onAction: (CaptureAction) -> Unit,
     onPickPhotos: () -> Unit = {},
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    cameraEnabled: Boolean = true,
 ) {
     var addingClass by remember { mutableStateOf(false) }
     var showingUnknowns by remember { mutableStateOf(false) }
@@ -176,7 +201,7 @@ fun CaptureScreen(
         LightSystemBarIcons()
         Scaffold(snackbarHost = { SnackbarHost(snackbar) }, containerColor = MaterialTheme.colorScheme.background) { padding ->
             BoxWithConstraints(Modifier.padding(padding).fillMaxSize()) {
-                val viewfinder = @Composable { modifier: Modifier -> Viewfinder(state, held, onAction, modifier) }
+                val viewfinder = @Composable { modifier: Modifier -> Viewfinder(state, held, cameraEnabled, onAction, modifier) }
                 val controls = @Composable { modifier: Modifier ->
                     Controls(
                         state = state,
@@ -279,11 +304,11 @@ private fun TopBar(state: CaptureState, onAction: (CaptureAction) -> Unit, onSho
 
 /** Square, because captured frames are center-cropped to a square: what's shown is what's saved. */
 @Composable
-private fun Viewfinder(state: CaptureState, held: Boolean, onAction: (CaptureAction) -> Unit, modifier: Modifier) {
+private fun Viewfinder(state: CaptureState, held: Boolean, cameraEnabled: Boolean, onAction: (CaptureAction) -> Unit, modifier: Modifier) {
     val currentOnAction by rememberUpdatedState(onAction)
     val auto = state.target == CaptureTarget.Auto
     Box(modifier.background(Color.Black)) {
-        if (!state.loading) {
+        if (!state.loading && cameraEnabled) {
             CameraPreview(
                 facing = state.facing,
                 // Auto-sort reads every frame for its live label; a class only needs frames it saves.
@@ -308,6 +333,41 @@ private fun Viewfinder(state: CaptureState, held: Boolean, onAction: (CaptureAct
         if (auto) {
             PredictionPill(state, Modifier.align(Alignment.BottomCenter).padding(12.dp))
         }
+        ShotCounter(
+            visible = state.recording && state.sessionShots > 0,
+            count = state.sessionShots,
+            modifier = Modifier.align(Alignment.Center),
+        )
+    }
+}
+
+/**
+ * How many images the shutter has taken since the screen opened, large in the middle of the viewfinder while
+ * it's down; each new number pops in like a countdown.
+ */
+@Composable
+private fun ShotCounter(visible: Boolean, count: Int, modifier: Modifier) {
+    AnimatedVisibility(visible = visible, enter = fadeIn(tween(SHOT_FADE_MS)), exit = fadeOut(tween(SHOT_FADE_MS)), modifier = modifier) {
+        AnimatedContent(
+            targetState = count,
+            // Each number settles before the next frame's arrives, and may draw outside the text's bounds while
+            // it's scaled up, so it's never clipped mid-animation.
+            transitionSpec = {
+                val enter = scaleIn(tween(SHOT_POP_MS, easing = FastOutSlowInEasing), initialScale = 1.6f) + fadeIn(tween(SHOT_POP_MS))
+                val exit = scaleOut(tween(SHOT_POP_MS), targetScale = 0.6f) + fadeOut(tween(SHOT_POP_MS))
+                (enter togetherWith exit).using(SizeTransform(clip = false))
+            },
+            contentAlignment = Alignment.Center,
+            label = "shotCount",
+        ) { number ->
+            Text(
+                "$number",
+                style = MaterialTheme.typography.displayLarge.copy(fontSize = 96.sp),
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.clearAndSetSemantics { },
+            )
+        }
     }
 }
 
@@ -327,7 +387,8 @@ private fun PredictionPill(state: CaptureState, modifier: Modifier) {
         match == null || closest == null -> null to stringResource(Res.string.auto_sort_point)
         match.isUnknown -> null to stringResource(Res.string.unknown_label) + " · " +
             stringResource(Res.string.auto_sort_closest, closest.name, match.percent())
-        else -> closest.colorIndex to closest.name + " · " + stringResource(Res.string.auto_sort_similar, match.percent())
+        else -> closest.colorIndex to closest.name + " · " +
+            stringResource(Res.string.auto_sort_similar, match.percent())
     }
     Surface(shape = RoundedCornerShape(16.dp), color = Color.Black.copy(alpha = 0.6f), contentColor = Color.White, modifier = modifier) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
@@ -698,6 +759,10 @@ private fun rememberHeld(recording: Boolean): Boolean {
 }
 
 private const val HOLD_TO_RECORD_MS = 250L
+
+/** Shot counter timings, shorter than the camera's frame interval so one number settles before the next. */
+private const val SHOT_POP_MS = 160
+private const val SHOT_FADE_MS = 120
 
 private fun ClassMatch.percent(): String = "${(similarity * 100).roundToInt()}%"
 

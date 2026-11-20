@@ -45,7 +45,8 @@ class FileUnknownImageRepository(
     private val nextIds = HashMap<String, Long>()
 
     override fun observe(datasetId: String): Flow<List<UnknownImage>> = flow {
-        locked(datasetId) { }
+        // Already read: no need to wait for the lock and the IO dispatcher.
+        if (datasetId !in loaded.value) locked(datasetId) { }
         emitAll(loaded.map { it[datasetId].orEmpty() }.distinctUntilChanged())
     }
 

@@ -18,7 +18,8 @@ import kotlinx.coroutines.test.setMain
 import org.onedroid.dataset.core.platform.image.RgbImage
 import org.onedroid.dataset.core.platform.ml.Backbone
 import org.onedroid.dataset.core.platform.ml.BackboneLoader
-import org.onedroid.dataset.core.platform.ml.MobileNetV3Small
+import org.onedroid.dataset.core.platform.ml.spec
+import org.onedroid.dataset.domain.model.EmbeddingModel
 import org.onedroid.dataset.core.platform.ml.SharedBackbone
 import org.onedroid.dataset.data.settings.FileSettingsRepository
 import org.onedroid.dataset.data.sorting.EmbeddingImageSorter
@@ -71,7 +72,7 @@ class CaptureViewModelTest {
     /** Embeds an image as its mean color, padded to the real embedding size. */
     private val backbone = object : Backbone {
         override fun embed(input: FloatArray): FloatArray {
-            val out = FloatArray(MobileNetV3Small.EMBEDDING_SIZE)
+            val out = FloatArray(EmbeddingModel.DEFAULT.spec.embeddingSize)
             for (i in input.indices) out[i % 3] += input[i]
             return out
         }
@@ -202,6 +203,31 @@ class CaptureViewModelTest {
         camera.onAction(CaptureAction.OnCapture(fakeJpeg("green")))
         camera.awaitState { state -> state.classes.first { it.id == red }.imageIds.size == 4 }
         assertEquals(emptyList(), camera.state.value.unknowns)
+    }
+
+    @Test
+    fun theShotCountRunsOnAcrossShutterPresses() = viewModelTest {
+        val (id, red) = redAndBlue()
+        val camera = capture(id, classId = red)
+        camera.awaitState { !it.loading }
+
+        // A press counts its asked-for shot at once, then every frame it takes.
+        camera.onAction(CaptureAction.OnStartRecording)
+        assertEquals(1, camera.state.value.sessionShots)
+        camera.onAction(CaptureAction.OnCapture(fakeJpeg("one")))
+        assertEquals(1, camera.state.value.sessionShots)
+        camera.onAction(CaptureAction.OnCapture(fakeJpeg("two")))
+        camera.onAction(CaptureAction.OnCapture(fakeJpeg("three")))
+        assertEquals(3, camera.state.value.sessionShots)
+
+        // Frames after release aren't counted, and the next press carries on from there.
+        camera.onAction(CaptureAction.OnStopRecording)
+        camera.onAction(CaptureAction.OnCapture(fakeJpeg("idle")))
+        assertEquals(3, camera.state.value.sessionShots)
+        camera.onAction(CaptureAction.OnStartRecording)
+        assertEquals(4, camera.state.value.sessionShots)
+        camera.onAction(CaptureAction.OnCapture(fakeJpeg("four")))
+        assertEquals(4, camera.state.value.sessionShots)
     }
 
     @Test
